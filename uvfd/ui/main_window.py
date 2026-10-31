@@ -38,6 +38,19 @@ FMT_TEXT = {0: "8N2", 1: "8E1", 2: "8O1", 3: "8N1"}
 BASIC_FIELDS = ["P0-02", "P0-03", "P0-10", "P0-12", "P0-14", "P0-17", "P0-18", "P6-10", "P8-13"]
 
 
+class RowSnapScroll(QScrollArea):
+    """Shows whole rows only - a list is never cut through a line of text."""
+
+    def __init__(self, row_h: int):
+        super().__init__()
+        self.row_h = row_h
+
+    def resizeEvent(self, e):
+        rem = self.height() % self.row_h
+        self.setViewportMargins(0, 0, 0, rem)
+        super().resizeEvent(e)
+
+
 class _UpdSignals(QObject):
     found = Signal(object)
     none = Signal(str)
@@ -470,22 +483,25 @@ class MainWindow(QMainWindow):
 
         mc = Card(tr("all_live"))
         mc.setFixedWidth(360)
-        area = QScrollArea()
+        area = RowSnapScroll(23)
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.NoFrame)
         inner = QWidget()
         mg = QGridLayout(inner)
         mg.setContentsMargins(0, 0, 6, 0)
         mg.setHorizontalSpacing(10)
-        mg.setVerticalSpacing(5)
+        mg.setVerticalSpacing(0)
         self.mon_labels = {}
         shown = {"run_hz", "out_a", "out_v", "dc_bus", "out_kw", "torque", "temp", "set_hz", "di", "do"}
         r = 0
         for m in D.MONITOR:
             if m.key in shown:
                 continue
-            mg.addWidget(label(m.title(i18n.lang()), "Muted", th.font(9)), r, 0)
+            name_ = label(m.title(i18n.lang()), "Muted", th.font(9))
+            name_.setFixedHeight(23)
+            mg.addWidget(name_, r, 0)
             v_ = label("—", font=th.font(9.5, 600, tabular=True))
+            v_.setFixedHeight(23)
             v_.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             mg.addWidget(v_, r, 1)
             self.mon_labels[m.idx] = v_
@@ -634,6 +650,7 @@ class MainWindow(QMainWindow):
             self.ctx.fault = s.fault
             if fault_changed:
                 self.apply_values({})
+                self.bus.totals_at = 0          # the drive's fault history changes with it
             cur_dec = 1 if self.ctx.values.get("PD-06") == 1 else 2
 
             def val(key):
@@ -845,6 +862,9 @@ class MainWindow(QMainWindow):
             self.bus.pc_control(False, restore)
 
     def on_command_done(self, what: str, ok: bool, err: str):
+        if not ok and what == "pd04":
+            self.banner.show_msg(err, th.AMBER, "⚠")
+            return
         if not ok:
             self.toast("%s: %s" % (tr("error"), err), error=True)
 

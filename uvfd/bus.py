@@ -100,6 +100,7 @@ class Bus(QObject):
         self.bad_u0: set[int] = set()
         self.fail_streak = 0
         self.link_ok = True
+        self.totals_at = 0.0
         self.thread = threading.Thread(target=self._run, name="uvfd-bus", daemon=True)
         self.thread.start()
 
@@ -151,7 +152,7 @@ class Bus(QObject):
 
     # ======================================================== the loop
     def _run(self):
-        next_fast = next_slow = next_basics = next_totals = 0.0
+        next_fast = next_slow = next_basics = 0.0
         while not self.stop_flag.is_set():
             try:
                 self._take_requests()
@@ -174,9 +175,9 @@ class Bus(QObject):
                     self._emit_values(self.read_codes(D.BASICS), "basics")
                     next_basics = now + 5.0
                     continue
-                if self.job is None and now >= next_totals:
+                if self.job is None and now >= self.totals_at:
                     self._emit_values(self.read_codes(D.TOTALS), "totals")
-                    next_totals = now + 15.0
+                    self.totals_at = now + 15.0
                     continue
                 if self.job is not None:
                     self._job_step()
@@ -313,6 +314,9 @@ class Bus(QObject):
             log.info("PD-04 (RAM) = %.1f s", want / 10)
         except (MbError, MbTimeout, MbBlocked) as e:
             log.warning("PD-04 write failed: %s", e)
+            # the safety net is NOT in place - the operator has to know
+            detail = exc_text(e.code, self.lang()) if isinstance(e, MbError) else str(e)
+            self.command_done.emit("pd04", False, "PD-04 timeout: " + detail)
 
     # ======================================================== commands
     def _update_max_hz(self):

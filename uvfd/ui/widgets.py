@@ -599,6 +599,7 @@ class Banner(QFrame):
         self.buttons.setSpacing(8)
         self.lay.addLayout(self.buttons)
         self.kind = ""
+        self.last_idle = ("", False)
         self.idle("")
 
     def _clear_buttons(self):
@@ -609,6 +610,10 @@ class Banner(QFrame):
 
     def idle(self, text: str, error: bool = False):
         """Back to the neutral state, showing `text` (status messages)."""
+        if text:
+            self.last_idle = (text, error)
+        else:
+            text, error = self.last_idle
         self.kind = ""
         self._clear_buttons()
         self.setStyleSheet("Banner { background:transparent; border:0; border-bottom:1px solid %s; border-radius:0; }"

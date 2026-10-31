@@ -201,7 +201,6 @@ QTableView, QTreeView, QListView {{
   alternate-background-color: #131A23;
 }}
 QTableView::item, QTreeView::item {{ padding: 4px 6px; border: 0; }}
-QTableView::item:hover, QTreeView::item:hover {{ background: #172231; }}
 QTableView::item:selected, QTreeView::item:selected {{ background: #18324A; }}
 QHeaderView {{ background: transparent; }}
 QHeaderView::section {{ background: {SURFACE}; color: {MUTED}; border: 0; border-bottom: 1px solid {BORDER};

@@ -86,6 +86,9 @@ class SimDrive:
 
     def inject_fault(self, code: int):
         with self.lock:
+            for i in (16, 15):                      # P9-16 <- P9-15 <- P9-14 <- new
+                self.ram[(9, i)] = self.eeprom[(9, i)] = self.ram.get((9, i - 1), 0)
+            self.ram[(9, 14)] = self.eeprom[(9, 14)] = code
             self.fault = code
             self.status = D.ST_STOP
             self.freq = 0.0

@@ -179,6 +179,8 @@ class KeepColorDelegate(QStyledItemDelegate):
 
     def initStyleOption(self, opt, idx):
         super().initStyleOption(opt, idx)
+        opt.state &= ~QStyle.State_HasFocus
+        opt.state &= ~QStyle.State_MouseOver
         fg = idx.data(Qt.ForegroundRole)
         opt.palette.setBrush(QPalette.HighlightedText, fg if fg is not None else th.qc(th.TEXT))
         opt.palette.setBrush(QPalette.Text, fg if fg is not None else th.qc(th.TEXT))
