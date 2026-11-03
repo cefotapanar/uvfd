@@ -7,7 +7,7 @@ New version: raise VERSION, write CHANGES (newest first), then
 and offers the update.
 """
 
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 #: GitHub repository the updater reads releases from (must be public).
 REPO = "cefotapanar/uvfd"
@@ -17,25 +17,30 @@ REPO = "cefotapanar/uvfd"
 #: still shows everything.
 CHANGES = {
     "mk": [
-        "Помош за поврзување (копче „Помош“ до „Поврзи“): ожичување, сите PD параметри што се за што и што "
+        "Поправено: прозорецот за напредок (Скенирај BIOS, Прочитај, Пребарај фреквентен) се заглавуваше "
+        "на 100% и не се затвораше ни со X. Сега се затвора сам кога ќе заврши, а X/Esc/Откажи ја прекинуваат "
+        "работата и го затвораат.",
+        "(1.1.0) Помош за поврзување (копче „Помош“ до „Поврзи“): ожичување, сите PD параметри што се за што и што "
         "треба да стои на фреквентниот, што е 8N2 и дека е PD-01 = 0, поставување од тастатура чекор по "
         "чекор, порти на компјутерот и листа за проверка.",
-        "„Пребарај фреквентен“: ги пробува сите брзини, формати и адреси 1–10. Ако не најде, кажува што е "
+        "(1.1.0) „Пребарај фреквентен“: ги пробува сите брзини, формати и адреси 1–10. Ако не најде, кажува што е "
         "проблемот: нема никаков сигнал (жици/порта), адаптерот враќа само ехо, или брзината/форматот не се исти.",
-        "Врската стандардно е фабричката на фреквентните: 9600 · 8N2 · адреса 1 (PD-00=5, PD-01=0, PD-02=1). "
+        "(1.1.0) Врската стандардно е фабричката на фреквентните: 9600 · 8N2 · адреса 1 (PD-00=5, PD-01=0, PD-02=1). "
         "Постоечките инсталации еднаш се префрлаат на неа.",
-        "Листата на порти се освежува сама кога ќе се отвори.",
+        "(1.1.0) Листата на порти се освежува сама кога ќе се отвори.",
         "(1.0.0) Прва верзија: мониторинг во живо, старт/стоп и Hz преку RS-485, подесувања по "
         "категории со пребарување, Read/Load на сите параметри, следење на BIOS верзии.",
     ],
     "en": [
-        "Connection help (“Help” next to “Connect”): wiring, every PD parameter and what the "
+        "Fixed: the progress window (Scan BIOS, Read, Find drive) stuck at 100% and could not be closed, "
+        "not even with X. It now closes by itself when done, and X/Esc/Cancel stop the job and close it.",
+        "(1.1.0) Connection help (“Help” next to “Connect”): wiring, every PD parameter and what the "
         "drive must hold, what 8N2 is (PD-01 = 0), keypad steps, the computer's ports and a checklist.",
-        "“Find drive”: tries every baud, format and address 1–10; if nothing answers it says why "
+        "(1.1.0) “Find drive”: tries every baud, format and address 1–10; if nothing answers it says why "
         "(no signal at all, adapter echo only, or baud/format mismatch).",
-        "The link defaults to the drives' factory setting: 9600 · 8N2 · address 1. Existing "
+        "(1.1.0) The link defaults to the drives' factory setting: 9600 · 8N2 · address 1. Existing "
         "installations switch to it once.",
-        "The port list refreshes itself when opened.",
+        "(1.1.0) The port list refreshes itself when opened.",
         "(1.0.0) First version: live monitoring, start/stop and Hz over RS-485, settings by "
         "category with search, Read/Load of all parameters, BIOS version tracking.",
     ],

@@ -263,6 +263,36 @@ def test_settings_move_to_factory_link_once():
         store.paths.DATA = old
 
 
+def test_progress_dialog_closes():
+    """1.1.0: the progress window stuck at 100% and ignored X - it must close on all three paths."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    from uvfd.ui.dialogs import ProgressDialog
+
+    class FakeBus:
+        cancelled = 0
+
+        def cancel_job(self):
+            FakeBus.cancelled += 1
+
+    for how in ("finish", "x", "cancel_button"):
+        d = ProgressDialog(None, "t", FakeBus())
+        d.show()
+        app.processEvents()
+        d.set_progress(10, 10, "P9")
+        if how == "finish":
+            d.finish()
+        elif how == "x":
+            d.close()                                   # the window's X goes through close()
+        else:
+            d.reject()
+        app.processEvents()
+        assert not d.isVisible(), how
+    assert FakeBus.cancelled == 2                       # finish() does not cancel a finished job
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

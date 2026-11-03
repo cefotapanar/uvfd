@@ -118,13 +118,14 @@ class ProgressDialog(Dialog):
         self.setModal(True)
         self.bus = bus
         self.cancel = cancel or bus.cancel_job
+        self.finished_ = False
         self.bar = QProgressBar()
         self.bar.setFixedHeight(8)
         self.lay.addWidget(self.bar)
         self.txt = label("", "Muted")
         self.lay.addWidget(self.txt)
         c = btn(tr("cancel"), "small")
-        c.clicked.connect(self.cancel)
+        c.clicked.connect(self.reject)
         self.buttons(c)
 
     def set_progress(self, done: int, total: int, text: str):
@@ -132,8 +133,20 @@ class ProgressDialog(Dialog):
         self.bar.setValue(done)
         self.txt.setText("%s   %d / %d" % (text, done, total))
 
+    def finish(self):
+        """
+        The job is over - close for real. Not close(): QDialog.close() goes
+        through reject() and is IGNORED while the dialog is still visible
+        afterwards; 1.1.0 stuck at 100% exactly like that.
+        """
+        self.finished_ = True
+        super().done(QDialog.Accepted)
+
     def reject(self):
-        self.cancel()
+        """X, Esc and Cancel: stop the job and close the window."""
+        if not self.finished_:
+            self.cancel()
+        super().done(QDialog.Rejected)
 
 
 class SaveSnapshotDialog(Dialog):

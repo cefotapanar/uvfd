@@ -596,7 +596,7 @@ class MainWindow(QMainWindow):
     def close_scan(self):
         d = getattr(self, "scan_dlg", None)
         if d is not None:
-            d.close()
+            d.finish()
             self.scan_dlg = None
 
     def on_connect_progress(self, what: str, n: int, total: int):
@@ -1011,7 +1011,7 @@ class MainWindow(QMainWindow):
     def close_progress(self):
         d = getattr(self, "progress_dlg", None)
         if d is not None:
-            d.close()
+            d.finish()
             self.progress_dlg = None
 
     def all_codes(self) -> list[str]:
