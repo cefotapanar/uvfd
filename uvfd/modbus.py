@@ -109,7 +109,13 @@ def list_ports() -> list[tuple[str, str]]:
 
 # Addresses the generic write must never touch: run/stop, setpoint, status,
 # monitoring, fault. They go through `write_control` only.
-CONTROL_HI = (0x10, 0x20, 0x30, 0x70, 0x80)
+CONTROL_HI = (0x10, 0x1F, 0x20, 0x30, 0x70, 0x80)
+
+# PP group over the wire (SU-650 manual 6.3): 0x1F00 = user password check,
+# 0x1F01 = parameter initialisation (1 factory w/o motor, 2 clear fault
+# records, 3 factory incl. motor). Reachable only through `write_init`.
+REG_PASSWORD = 0x1F00
+REG_INIT = 0x1F01
 
 
 class Link:
@@ -275,6 +281,12 @@ class Link:
         """
         if ((addr >> 8) & 0xFF) in CONTROL_HI:
             raise MbBlocked("control register")
+        self._write06(addr, val)
+
+    def write_init(self, addr: int, val: int):
+        """Password check (0x1F00) or parameter initialisation (0x1F01). Nothing else."""
+        if addr not in (REG_PASSWORD, REG_INIT):
+            raise MbBlocked("not an initialisation register")
         self._write06(addr, val)
 
     def write_control(self, addr: int, val: int):

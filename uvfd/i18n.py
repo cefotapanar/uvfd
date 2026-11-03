@@ -27,6 +27,58 @@ T = {
     "address": ("Адреса", "Address"),
     "auto": ("Авто", "Auto"),
     "demo": ("ДЕМО (симулиран фреквентен)", "DEMO (simulated drive)"),
+    "drive_tab": ("Фреквентен", "Drive"),
+    "label_row": ("Ознака", "Label"),
+    "label_unknown": ("непозната — постави ја еднаш", "unknown — set it once"),
+    "model_no": ("Модел бр.", "Model No."),
+    "type_row": ("Тип", "Type"),
+    "type_g": ("G — константен момент", "G — constant torque"),
+    "type_p": ("P — пумпи / вентилатори", "P — pumps / fans"),
+    "supply_row": ("Напојување", "Supply"),
+    "rated_v_row": ("Номинален напон (P7-08)", "Rated voltage (P7-08)"),
+    "code_word": ("код", "code"),
+    "igbt_row": ("IGBT модул", "IGBT module"),
+    "motor_row": ("Мотор (поставено во P1)", "Motor (set in P1)"),
+    "set_label": ("Постави ознака", "Set label"),
+    "label_model": ("Модел", "Model"),
+    "kw_label": ("Моќност", "Power"),
+    "model_label_title": ("Кој фреквентен е ова?", "Which drive is this?"),
+    "model_label_info": ("Фреквентниот преку кабелот не ја кажува својата моќност ни серискиот број — "
+                         "кажува само број на модел (P7-10 = %d) и BIOS %s. Избери го моделот од натписната "
+                         "плочка (или од табелите во упатствата) еднаш, и секој фреквентен со истиот број на "
+                         "модел ќе се прикажува со оваа ознака.",
+                         "Over the cable the drive tells neither its power nor a serial number — only a "
+                         "model number (P7-10 = %d) and BIOS %s. Pick the model from the nameplate (or the "
+                         "manuals' tables) once, and every drive with the same model number shows this label."),
+    "factory_btn": ("Фабрички", "Factory"),
+    "factory_btn_tip": ("Врати го фреквентниот на фабрички поставки (PP-01)",
+                        "Reset the drive to factory settings (PP-01)"),
+    "factory_title": ("Враќање на фабрички поставки", "Factory reset"),
+    "factory_info": ("Ова е ресетот на самиот фреквентен (PP-01, како од тастатура), преку кабелот.<br><br>"
+                     "• Моторот мора да е <b>запрен</b>.<br>"
+                     "• Се враќаат и командите (P0-02) — <b>PC управувањето се исклучува</b>.<br>"
+                     "• Се враќа и комуникацијата на <b>9600 · 8N2 · адреса 1</b>; UVFD сама повторно се поврзува.",
+                     "This is the drive's own reset (PP-01, as from the keypad), over the cable.<br><br>"
+                     "• The motor must be <b>stopped</b>.<br>"
+                     "• Commands (P0-02) go back too — <b>PC control turns off</b>.<br>"
+                     "• Communication goes back to <b>9600 · 8N2 · address 1</b>; UVFD reconnects by itself."),
+    "factory_mode1": ("Фабрички, без параметрите на моторот (PP-01 = 1)  — препорачано",
+                      "Factory, keeping the motor parameters (PP-01 = 1)  — recommended"),
+    "factory_mode3": ("Фабрички, заедно со моторот (PP-01 = 3)  — само SU650",
+                      "Factory, including the motor (PP-01 = 3)  — SU650 only"),
+    "factory_mode2": ("Само избриши ја историјата на грешки (PP-01 = 2)", "Only clear the fault history (PP-01 = 2)"),
+    "factory_keep": ("Прво зачувај ги сегашните поставки како профил (за да можеш да ги вратиш)",
+                     "Save the current settings as a profile first (so you can bring them back)"),
+    "factory_password": ("Лозинка (PP-00), ако има:", "Password (PP-00), if any:"),
+    "factory_password_hint": ("празно = нема", "empty = none"),
+    "factory_password_bad": ("Лозинката е број (0–65535).", "The password is a number (0–65535)."),
+    "factory_go": ("Ресетирај", "Reset"),
+    "factory_saving": ("Зачувување на сегашните поставки…", "Saving the current settings…"),
+    "factory_running": ("Ресетирање…", "Resetting…"),
+    "factory_saved_as": ("Пред ресет %s", "Before reset %s"),
+    "factory_done": ("Фабричките поставки се вратени. Повторно поврзување на 9600 · 8N2 · #1…",
+                     "Factory settings restored. Reconnecting at 9600 · 8N2 · #1…"),
+    "faults_cleared": ("Историјата на грешки е избришана.", "Fault history cleared."),
     "conn_help": ("Помош за поврзување", "Connection help"),
     "help_short": ("Помош", "Help"),
     "find_drive": ("Пребарај фреквентен", "Find drive"),

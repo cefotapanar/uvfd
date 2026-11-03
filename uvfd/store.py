@@ -215,9 +215,22 @@ class FirmwareRegistry:
         d = _read_json(self.path, {})
         self.base: str = d.get("base", "") if isinstance(d, dict) else ""
         self.versions: dict[str, dict] = d.get("versions", {}) if isinstance(d, dict) else {}
+        # P7-10 "Model No." -> what that drive turned out to be (from a nameplate once)
+        self.models: dict[str, dict] = d.get("models", {}) if isinstance(d, dict) else {}
 
     def save(self):
-        _write_json(self.path, {"schema": FW_SCHEMA, "base": self.base, "versions": self.versions})
+        _write_json(self.path, {"schema": FW_SCHEMA, "base": self.base, "versions": self.versions,
+                                "models": self.models})
+
+    def model_label(self, model_no: int) -> dict | None:
+        return self.models.get(str(model_no)) if model_no is not None and model_no >= 0 else None
+
+    def set_model_label(self, model_no: int, label: dict | None):
+        if label:
+            self.models[str(model_no)] = dict(label, date=now_str())
+        else:
+            self.models.pop(str(model_no), None)
+        self.save()
 
     # -------------------------------------------------------------- recording
     def seen(self, key: str, model_text: str) -> bool:

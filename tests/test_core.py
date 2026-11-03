@@ -433,6 +433,91 @@ def test_close_can_keep_pc_mode():
         _pc_done()
 
 
+def test_factory_reset_through_1f01():
+    from uvfd.bus import JobError, job_factory
+    bus = _bus_with("21")
+    sim = bus.sim
+    sim.ram[(0, 12)] = sim.eeprom[(0, 12)] = 4000             # P0-12 changed (factory 5000)
+    sim.ram[(0, 2)] = sim.eeprom[(0, 2)] = 2                  # PC control on
+    sim.ram[(9, 14)] = sim.eeprom[(9, 14)] = 11
+    try:
+        bus.link.write_reg(0x1F01, 1)
+        raise AssertionError("0x1F01 must be unreachable through write_reg")
+    except MbBlocked:
+        pass
+    assert _run(job_factory(bus, 1, settle=0)) == 1
+    assert (sim.ram[(0, 12)], sim.ram[(0, 2)]) == (5000, 0)
+    assert sim.ram[(1, 1)] == 22                              # mode 1 keeps the motor data
+    assert sim.ram[(9, 14)] == 11                             # ... and the fault history
+    _run(job_factory(bus, 2, settle=0))
+    assert sim.ram[(9, 14)] == 0                              # mode 2 = clear fault records
+
+
+def test_factory_reset_refused_running_and_locked():
+    from uvfd.bus import JobError, job_factory
+    bus = _bus_with("21")
+    sim = bus.sim
+    sim.password = 1234
+    try:
+        _run(job_factory(bus, 1, settle=0))
+        raise AssertionError("locked drive must refuse")
+    except JobError as e:
+        assert "PP-00" in str(e)
+    assert _run(job_factory(bus, 1, password=1234, settle=0)) == 1
+    bus.link.write_reg(CAT.get("P0-02").address, 2)
+    bus.link.write_control(D.REG_CMD, D.CMD_FWD)
+    time.sleep(0.05)
+    bus.link.read_regs(D.REG_STATUS, 1)
+    try:
+        _run(job_factory(bus, 1, password=1234, settle=0))
+        raise AssertionError("must refuse while running")
+    except JobError as e:
+        assert "запри" in str(e)
+
+
+def test_models_table_and_learned_labels():
+    import json
+    m = json.loads((ROOT / "uvfd/resources/models.json").read_text(encoding="utf-8"))["models"]
+    by = {x["model"]: x for x in m}
+    assert len(m) == 77 and by["G600-4T45G"]["kw"] == 45 and by["G600-4T45G"]["out_a"] == 90
+    assert by["G600-6T30G"]["kw"] == 30                       # the manual's typo (37) corrected by name
+    reg = store.FirmwareRegistry(Path(tempfile.mkdtemp()) / "fw.json")
+    reg.set_model_label(101, {"model": "G600-4T45G", "kw": 45})
+    again = store.FirmwareRegistry(reg.path)
+    assert again.model_label(101)["model"] == "G600-4T45G" and again.model_label(209) is None
+
+
+def test_factory_button_end_to_end():
+    import uvfd.ui.drive_panel as dp
+
+    class FakeDialog:
+        def __init__(self, parent, ctx):
+            self.choice = (D.INIT_FACTORY, True, None)        # mode 1, keep a copy, no password
+
+        def exec(self):
+            return 1
+    real = dp.FactoryResetDialog
+    dp.FactoryResetDialog = FakeDialog
+
+    def prepare(sim):
+        sim.ram[(0, 12)] = sim.eeprom[(0, 12)] = 4000
+    app, win, bus, sim, asked = _pc_scenario(prepare, lambda text: 0)
+    try:
+        win.ctx.settings["pc_restore"] = {"P0-02": 0, "P0-03": 4}
+        win.open_factory_reset()
+        assert _wait(app, lambda: sim.ram[(0, 12)] == 5000, 15), "drive not reset"
+        assert _wait(app, lambda: win.ctx.connected and win.ctx.values.get("P0-12") == 5000, 15), \
+            "did not reconnect after the reset"
+        snaps = store.list_snapshots()
+        assert snaps and snaps[0].values.get("P0-12") == 4000, "no copy saved before the reset"
+        assert win.ctx.settings.get("pc_restore") == {}
+        assert win.drive_panel.vals["model_no"].text() == "209"
+        bus.shutdown()
+    finally:
+        dp.FactoryResetDialog = real
+        _pc_done()
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

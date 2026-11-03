@@ -7,7 +7,7 @@ New version: raise VERSION, write CHANGES (newest first), then
 and offers the update.
 """
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 #: GitHub repository the updater reads releases from (must be public).
 REPO = "cefotapanar/uvfd"
@@ -17,7 +17,14 @@ REPO = "cefotapanar/uvfd"
 #: still shows everything.
 CHANGES = {
     "mk": [
-        "„Прекини“ (и затворање на програмата): ако PC управувањето го вклучи UVFD на тој фреквентен, прашува "
+        "Копче „Фабрички“ (во Основни подесувања): вистинскиот ресет на фреквентниот преку кабелот (PP-01 на "
+        "0x1F01): фабрички без моторот, со моторот (SU650) или само бришење на историјата на грешки. Пред тоа "
+        "сегашните поставки се зачувуваат како профил; по ресетот UVFD сама се поврзува на 9600 · 8N2 · #1.",
+        "Панел „Фреквентен“ (долу десно): број на модел (P7-10), BIOS, тип G/P, напојување од DC напонот, "
+        "номинален напон (P7-08), температура на IGBT модулот (P7-07) и податоците на моторот. Ознака на "
+        "моделот (на пр. G600-4T45G · 45 kW) се поставува еднаш од табелата на модели (77 модели од "
+        "упатствата) и потоа се гледа горе за секој фреквентен со ист број на модел.",
+        "(1.2.0) „Прекини“ (и затворање на програмата): ако PC управувањето го вклучи UVFD на тој фреквентен, прашува "
         "дали да го врати претходниот режим (P0-02 и P0-03 какви што биле). Ако моторот работи, прво го запира. "
         "Ако фреквентниот веќе бил во PC режим, не прашува ништо.",
         "(1.1.2) „Пребарај фреквентен“: „Откажи“ и X среде пребарување сега го затвораат прозорецот и програмата "
@@ -37,7 +44,14 @@ CHANGES = {
         "категории со пребарување, Read/Load на сите параметри, следење на BIOS верзии.",
     ],
     "en": [
-        "“Disconnect” (and closing the program): if UVFD turned PC control on for that drive, it asks whether "
+        "“Factory” button (in Basic settings): the drive's own reset over the cable (PP-01 at 0x1F01): factory "
+        "without the motor, with the motor (SU650) or only clearing the fault history. The current settings are "
+        "saved as a profile first; afterwards UVFD reconnects at 9600 · 8N2 · #1.",
+        "“Drive” panel (bottom right): model number (P7-10), BIOS, G/P type, supply from the DC bus, rated "
+        "voltage (P7-08), IGBT module temperature (P7-07) and the motor data. A model label (e.g. G600-4T45G · "
+        "45 kW) is set once from the model table (77 models from the manuals) and then shown at the top for "
+        "every drive with the same model number.",
+        "(1.2.0) “Disconnect” (and closing the program): if UVFD turned PC control on for that drive, it asks whether "
         "to restore the previous mode (P0-02 and P0-03 as they were), stopping the motor first if it runs. "
         "If the drive was already in PC mode, nothing is asked.",
         "(1.1.2) “Find drive”: Cancel and X during a search now close the window and free the program at once; "

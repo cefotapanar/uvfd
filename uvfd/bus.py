@@ -28,7 +28,7 @@ from PySide6.QtCore import QObject, Signal
 
 from . import drive as D
 from .catalog import Catalog, Param, make_code, parse_code, write_rank
-from .modbus import CHUNK, FORMATS, Link, MbBlocked, MbError, MbTimeout, exc_text
+from .modbus import CHUNK, FORMATS, REG_INIT, REG_PASSWORD, Link, MbBlocked, MbError, MbTimeout, exc_text
 
 log = logging.getLogger("uvfd.bus")
 
@@ -656,6 +656,37 @@ def job_scan(bus: Bus, groups: list[tuple[int, int]]):
             done += k
             yield done, total, "P%s-%02d" % ("0123456789ABCDEF"[g], min(pos, last))
     return found
+
+
+def job_factory(bus: Bus, mode: int, password: int | None = None, settle: float = 3.0):
+    """
+    PP-01 through 0x1F01: the drive's own initialisation (SU-650 manual 6.3).
+    The drive must be stopped; with a user password (PP-00) it is checked on
+    0x1F00 first. The drive needs a few seconds afterwards.
+    """
+    lang = bus.lang()
+    st = bus.link.read_regs(D.REG_STATUS, 1)[0]
+    if st != D.ST_STOP:
+        raise JobError("Моторот работи - запри го пред враќање на фабрички." if lang == "mk"
+                       else "The motor is running - stop it before a factory reset.")
+    yield 0, 3, "PP-00"
+    try:
+        if password is not None:
+            bus.link.write_init(REG_PASSWORD, int(password) & 0xFFFF)
+        bus.link.write_init(REG_INIT, mode)
+    except MbError as e:
+        if e.code in (1, 7):
+            raise JobError(("Фреквентниот е заклучен со лозинка (PP-00). Внеси ја лозинката и пробај пак."
+                            if lang == "mk" else
+                            "The drive is locked with a password (PP-00). Enter it and try again.")
+                           + " (%s)" % exc_text(e.code, lang))
+        raise JobError(exc_text(e.code, lang))
+    yield 1, 3, "PP-01 = %d" % mode
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < settle:
+        time.sleep(0.2)
+        yield 2, 3, "…"
+    return mode
 
 
 def job_write(bus: Bus, items: list[WriteItem], require_stop: bool = True):

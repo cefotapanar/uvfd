@@ -102,8 +102,24 @@ DO_BITS = ["DO3", "RY1", "RY2", "DO1", "DO2"]
 # settings shown on the main screen, and the totals.
 IDENTITY = ["P7-10", "P7-11", "P0-00", "P1-01", "P1-02", "P7-08"]
 BASICS = ["P0-02", "P0-03", "P0-10", "P0-12", "P0-14", "P0-17", "P0-18",
-          "P6-10", "P8-13", "P1-03", "P1-04", "P1-05", "PD-04", "PD-06", "P0-22"]
+          "P6-10", "P8-13", "P1-01", "P1-02", "P1-03", "P1-04", "P1-05", "PD-04", "PD-06", "P0-22",
+          "P7-07"]
 TOTALS = ["P7-09", "P7-13", "P7-14", "P9-14", "P9-15", "P9-16"]
+
+
+# PP-01 over 0x1F01 (SU-650 manual 6.3; WSTG600 has 1 and 2 only)
+INIT_FACTORY, INIT_CLEAR_FAULTS, INIT_FACTORY_WITH_MOTOR = 1, 2, 3
+
+
+def supply_class(dc_bus_v: float | None) -> str:
+    """Mains class from the DC bus (~1.35 x line voltage): 310 V -> 220 V, 540 V -> 380 V."""
+    if dc_bus_v is None or dc_bus_v < 150:
+        return ""
+    if dc_bus_v < 420:
+        return "220 V"
+    if dc_bus_v < 780:
+        return "380–460 V"
+    return "690 V"
 
 
 # --------------------------------------------------------------------------- faults
@@ -172,7 +188,7 @@ class Identity:
 
     @property
     def model_text(self) -> str:
-        return "%.2f" % (self.model / 100.0) if self.model >= 0 else "?"
+        return str(self.model) if self.model >= 0 else "?"
 
     @property
     def power_text(self) -> str:

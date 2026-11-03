@@ -355,7 +355,7 @@ class TrendChart(QWidget):
             if not pts:
                 continue
             vals = [v for _, v in pts]
-            hi = max(max(vals), 1e-6)
+            hi = max(max(vals), 1.0)              # an idle drive still gets a readable scale
             nice = _nice_max(hi)
             if idx < 2:
                 p.setPen(th.qc(s["color"], 200))

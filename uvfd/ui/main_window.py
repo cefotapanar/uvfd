@@ -474,6 +474,9 @@ class MainWindow(QMainWindow):
         col.setSpacing(12)
         bc = Card(tr("basics"))
         bc.setFixedWidth(360)
+        self.bt_factory = btn("↺  " + tr("factory_btn"), "small", tr("factory_btn_tip"))
+        self.bt_factory.clicked.connect(self.open_factory_reset)
+        bc.head.addWidget(self.bt_factory)
         bg = QGridLayout()
         bg.setHorizontalSpacing(8)
         bg.setVerticalSpacing(7)
@@ -507,8 +510,14 @@ class MainWindow(QMainWindow):
         bc.lay.addLayout(bg)
         col.addWidget(bc)
 
-        mc = Card(tr("all_live"))
+        mc = Card()
         mc.setFixedWidth(360)
+        from PySide6.QtWidgets import QTabWidget
+        from .drive_panel import DrivePanel
+        self.right_tabs = QTabWidget()
+        self.right_tabs.setDocumentMode(True)
+        self.drive_panel = DrivePanel(self.ctx, self.edit_model_label)
+        self.right_tabs.addTab(self.drive_panel, tr("drive_tab"))
         area = RowSnapScroll(23)
         area.setWidgetResizable(True)
         area.setFrameShape(QFrame.NoFrame)
@@ -534,7 +543,8 @@ class MainWindow(QMainWindow):
             r += 1
         mg.setRowStretch(r, 1)
         area.setWidget(inner)
-        mc.lay.addWidget(area, 1)
+        self.right_tabs.addTab(area, tr("all_live"))
+        mc.lay.addWidget(self.right_tabs, 1)
         col.addWidget(mc, 1)
         return col
 
@@ -770,11 +780,9 @@ class MainWindow(QMainWindow):
         if on:
             ident = self.ctx.identity
             self.lbl_link.setText(self.ctx.link_display())
-            parts = []
-            if ident.power_text:
-                parts.append(ident.power_text)
-            if ident.voltage > 0:
-                parts.append("%d V" % ident.voltage)
+            from .drive_panel import label_summary
+            lab = label_summary(self.ctx.fw.model_label(ident.model))
+            parts = [lab or "%s %s" % (tr("model_no"), ident.model_text)]
             if ident.gp in (1, 2):
                 parts.append("G" if ident.gp == 1 else "P")
             self.lbl_link2.setText("  ·  ".join(parts))
@@ -790,15 +798,15 @@ class MainWindow(QMainWindow):
             b_.clicked.connect(self.open_bios)
             self.bios_box.addWidget(b_)
             if key == self.ctx.fw.base:
-                self.bios_box.addWidget(chip(tr("bios_base"), th.VIOLET))
+                self.bios_box.addWidget(chip(tr("bios_base"), th.VIOLET), 0, Qt.AlignVCenter)
             elif self.ctx.fw.versions.get(key, {}).get("seen", 0) <= 1:
-                self.bios_box.addWidget(chip(tr("bios_new"), th.AMBER, filled=True))
-            self.bios_box.addWidget(label("%s %s" % (tr("model"), ident.model_text), "Muted", th.font(9)))
+                self.bios_box.addWidget(chip(tr("bios_new"), th.AMBER, filled=True), 0, Qt.AlignVCenter)
         else:
             self.pill.set_state(tr("st_offline"), th.FAINT, False)
             self.gauge.set_value(0, None)
             self.gauge.sub = ""
             self.gauge.fault = False
+        self.drive_panel.refresh()
         self.update_controls()
 
     # ================================================================== live data
@@ -833,6 +841,7 @@ class MainWindow(QMainWindow):
             self.gauge.fault = bool(s.fault)
             for key in ("out_a", "out_v", "dc_bus", "out_kw", "torque", "temp", "set_hz"):
                 self.kpi[key].set_value(val(key))
+            self.drive_panel.set_dc(val("dc_bus"))
             rated_hz = (self.ctx.values.get("P1-04") or 5000) / 100.0
             rated_rpm = self.ctx.values.get("P1-05") or 1450
             if hz is not None and rated_hz > 0:
@@ -917,6 +926,7 @@ class MainWindow(QMainWindow):
             self.lbl_faults.setText("<br>".join(lines))
         if any(c in vals for c in ("P0-10", "P0-22")):
             self.sync_setpoint_range()
+        self.drive_panel.refresh()
         self.update_controls()
 
     # ================================================================== control
@@ -954,6 +964,7 @@ class MainWindow(QMainWindow):
         else:
             self.lbl_pc2.setText(tr("pc_off_hint", self.src_name()))
         self.bt_read.setEnabled(on)
+        self.bt_factory.setEnabled(on and not running)
         for code, ed in self.basic_editors.items():
             ed.setEnabled(on)
 
@@ -1060,10 +1071,39 @@ class MainWindow(QMainWindow):
 
     # ================================================================== jobs
     def on_job_progress(self, tag: str, done: int, total: int, text: str):
-        if tag in ("read:all", "scan") and getattr(self, "progress_dlg", None):
+        if tag in ("read:all", "scan", "factory:read", "factory") and getattr(self, "progress_dlg", None):
             self.progress_dlg.set_progress(done, total, text)
 
     def on_job_done(self, tag: str, result):
+        if tag == "factory:read":
+            self.close_progress()
+            mode, _keep, pwd = self._factory
+            from ..store import SnapshotFile, now_str, save_snapshot
+            ident = self.ctx.identity or D.Identity()
+            vals = {k: v for k, v in result.items() if v is not None}
+            save_snapshot(SnapshotFile(name=tr("factory_saved_as", now_str()), values=vals,
+                                       brand=self.ctx.settings.get("last_brand", ""),
+                                       drive={"model": ident.model, "sw": ident.sw, "power": ident.power,
+                                              "voltage": ident.voltage}, link=self.ctx.link_text))
+            self.toast(tr("snap_saved", tr("factory_saved_as", now_str()), len(vals)))
+            self.run_factory(mode, pwd)
+            return
+        if tag == "factory":
+            self.close_progress()
+            if result == D.INIT_CLEAR_FAULTS:
+                self.bus.totals_at = 0
+                self.toast(tr("faults_cleared"))
+                return
+            self.ctx.settings["pc_restore"] = {}
+            self.ctx.settings.save()
+            self.banner.show_msg(tr("factory_done"), th.ACCENT, "↺")
+            self.bus.disconnect_drive(False)
+
+            def again():
+                self.factory_link()
+                self.connect_now()
+            QTimer.singleShot(1200, again)
+            return
         if tag == "write:basic":
             for r in result:
                 p = self.ctx.cat.get(r.code)
@@ -1091,6 +1131,10 @@ class MainWindow(QMainWindow):
             self.banner.show_msg(tr("scan_done", key, len(result), nd), th.VIOLET, "◆", [b_] if nd else [])
 
     def on_job_failed(self, tag: str, err: str):
+        if tag in ("factory:read", "factory"):
+            self.close_progress()
+            info(self, tr("factory_title"), err, warn=True)
+            return
         if tag in ("read:all", "scan"):
             self.close_progress()
         if tag.startswith("write:basic") or tag in ("read:all", "scan"):
@@ -1135,6 +1179,36 @@ class MainWindow(QMainWindow):
         self.show_progress(tr("scan_bios") + " %s" % self.ctx.identity.bios_key)
 
     # ================================================================== windows
+    def edit_model_label(self):
+        from .drive_panel import ModelLabelDialog
+        if self.ctx.connected and ModelLabelDialog(self, self.ctx).exec():
+            self.apply_connection_state()
+
+    def open_factory_reset(self):
+        if not self.ctx.connected:
+            info(self, tr("factory_title"), tr("connect_first"))
+            return
+        from .drive_panel import FactoryResetDialog
+        d = FactoryResetDialog(self, self.ctx)
+        if not d.exec() or not d.choice:
+            return
+        mode, keep, pwd = d.choice
+        self._factory = d.choice
+        if keep and mode != D.INIT_CLEAR_FAULTS:
+            if self.bus.start_job("factory:read", job_read, self.all_codes()):
+                self.show_progress(tr("factory_saving"))
+            else:
+                self.toast(tr("busy"), error=True)
+            return
+        self.run_factory(mode, pwd)
+
+    def run_factory(self, mode: int, pwd):
+        from ..bus import job_factory
+        if self.bus.start_job("factory", job_factory, mode, pwd):
+            self.show_progress(tr("factory_running"))
+        else:
+            self.toast(tr("busy"), error=True)
+
     def open_setup(self, category: str | None = None):
         from .setup_dialog import SetupDialog
         dlg = SetupDialog(self, self.ctx, category)

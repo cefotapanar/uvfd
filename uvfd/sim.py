@@ -63,6 +63,8 @@ class SimDrive:
             gi = parse_code(code)
             self.eeprom[gi] = v & 0xFFFF
         self.ram = dict(self.eeprom)
+        self.password = 0          # PP-00; 0 = none
+        self.unlocked = False
         # dynamic state
         self.status = D.ST_STOP
         self.cmd = D.CMD_STOP
@@ -259,6 +261,20 @@ class SimDrive:
             return with_crc(echo)
         if 0x2001 <= addr <= 0x2004:
             return with_crc(echo)
+        if addr == 0x1F00:                         # password check
+            if self.password and val != self.password:
+                return self._exc(0x06, 1)
+            self.unlocked = True
+            return with_crc(echo)
+        if addr == 0x1F01:                         # PP-01 parameter initialisation
+            if self.password and not self.unlocked:
+                return self._exc(0x06, 7)
+            if self.status != D.ST_STOP:
+                return self._exc(0x06, 5)
+            if val not in (1, 2, 3):
+                return self._exc(0x06, 3)
+            self._initialise(val)
+            return with_crc(echo)
         persistent = 0xF0 <= hi <= 0xFE
         ram_only = hi <= 0x0E
         if not (persistent or ram_only):
@@ -284,6 +300,21 @@ class SimDrive:
         if persistent:
             self.eeprom[key] = val
         return with_crc(echo)
+
+    def _initialise(self, mode: int):
+        if mode == 2:
+            for i in (14, 15, 16):
+                self.ram[(9, i)] = self.eeprom[(9, i)] = 0
+            return
+        for p in self.cat.params:
+            key = (p.g, p.i)
+            if key not in self.eeprom or p.ro or p.default is None:
+                continue
+            if p.g == 1 and mode == 1:
+                continue                           # 1 keeps the motor parameters
+            self.eeprom[key] = self.ram[key] = p.default & 0xFFFF
+        self.cmd = D.CMD_STOP
+        self.setpoint = 0
 
     def power_cycle(self):
         with self.lock:
