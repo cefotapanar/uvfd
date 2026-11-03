@@ -518,6 +518,17 @@ def test_factory_button_end_to_end():
         _pc_done()
 
 
+def test_spec_packs_every_resource():
+    """1.3.0 shipped without models.json - the spec listed resources one by one."""
+    import fnmatch
+    import re
+    spec = (ROOT / "UVFD.spec").read_text(encoding="utf-8")
+    patterns = re.findall(r'\("uvfd/resources/([^"]+)", "uvfd/resources"\)', spec)
+    for f in (ROOT / "uvfd" / "resources").iterdir():
+        if f.is_file():
+            assert any(fnmatch.fnmatch(f.name, pat) for pat in patterns), f.name + " is not packed into the exe"
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

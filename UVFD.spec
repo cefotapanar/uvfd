@@ -14,7 +14,8 @@ a = Analysis(
     ["main.py"],
     pathex=[],
     binaries=[],
-    datas=[("uvfd/resources/catalog.json", "uvfd/resources"),
+    # every resource file - tests/test_core.py checks that none is left out
+    datas=[("uvfd/resources/*.json", "uvfd/resources"),
            ("uvfd/resources/uvfd.ico", "uvfd/resources")],
     hiddenimports=hidden,
     hookspath=[],
