@@ -7,7 +7,7 @@ New version: raise VERSION, write CHANGES (newest first), then
 and offers the update.
 """
 
-VERSION = "1.3.1"
+VERSION = "1.4.0"
 
 #: GitHub repository the updater reads releases from (must be public).
 REPO = "cefotapanar/uvfd"
@@ -17,7 +17,11 @@ REPO = "cefotapanar/uvfd"
 #: still shows everything.
 CHANGES = {
     "mk": [
-        "Поправено: табелата со модели (за „Постави ознака“) не беше спакувана во програмата 1.3.0.",
+        "Програмата сега ги знае BIOS верзиите 18, 21, 712 и 20000 од вистински фреквентни (со нивните "
+        "скенирања) — не се прикажуваат како нови. Основна е 18, најосновната.",
+        "ДЕМО (симулираниот фреквентен) повеќе не се запишува во BIOS верзиите; лажната BIOS 502 од ДЕМО "
+        "се брише сама.",
+        "(1.3.1) Поправено: табелата со модели (за „Постави ознака“) не беше спакувана во програмата 1.3.0.",
         "(1.3.0) Копче „Фабрички“ (во Основни подесувања): вистинскиот ресет на фреквентниот преку кабелот (PP-01 на "
         "0x1F01): фабрички без моторот, со моторот (SU650) или само бришење на историјата на грешки. Пред тоа "
         "сегашните поставки се зачувуваат како профил; по ресетот UVFD сама се поврзува на 9600 · 8N2 · #1.",
@@ -45,7 +49,11 @@ CHANGES = {
         "категории со пребарување, Read/Load на сите параметри, следење на BIOS верзии.",
     ],
     "en": [
-        "Fixed: the model table (for “Set label”) was not packed into the 1.3.0 program.",
+        "The program now knows BIOS versions 18, 21, 712 and 20000 from real drives (with their scans) — "
+        "they no longer show as new. The base is 18, the most basic one.",
+        "DEMO (the simulated drive) is no longer recorded as a BIOS version; the fake BIOS 502 from DEMO "
+        "is removed automatically.",
+        "(1.3.1) Fixed: the model table (for “Set label”) was not packed into the 1.3.0 program.",
         "(1.3.0) “Factory” button (in Basic settings): the drive's own reset over the cable (PP-01 at 0x1F01): factory "
         "without the motor, with the motor (SU650) or only clearing the fault history. The current settings are "
         "saved as a profile first; afterwards UVFD reconnects at 9600 · 8N2 · #1.",
