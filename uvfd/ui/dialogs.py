@@ -113,17 +113,18 @@ class SafetyStrip(QFrame):
 
 
 class ProgressDialog(Dialog):
-    def __init__(self, parent, title: str, bus):
+    def __init__(self, parent, title: str, bus, cancel=None):
         super().__init__(parent, title, 460)
         self.setModal(True)
         self.bus = bus
+        self.cancel = cancel or bus.cancel_job
         self.bar = QProgressBar()
         self.bar.setFixedHeight(8)
         self.lay.addWidget(self.bar)
         self.txt = label("", "Muted")
         self.lay.addWidget(self.txt)
         c = btn(tr("cancel"), "small")
-        c.clicked.connect(bus.cancel_job)
+        c.clicked.connect(self.cancel)
         self.buttons(c)
 
     def set_progress(self, done: int, total: int, text: str):
@@ -132,7 +133,7 @@ class ProgressDialog(Dialog):
         self.txt.setText("%s   %d / %d" % (text, done, total))
 
     def reject(self):
-        self.bus.cancel_job()
+        self.cancel()
 
 
 class SaveSnapshotDialog(Dialog):

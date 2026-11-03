@@ -126,7 +126,7 @@ class Link:
         self.stopbits = 2
         self.slave = 1
         self.gap = 0.012             # idle time between frames (> 3.5 chars)
-        self.stats = {"tx": 0, "ok": 0, "err": 0, "timeouts": 0}
+        self.stats = {"tx": 0, "ok": 0, "err": 0, "timeouts": 0, "rx": 0, "echo": 0}
         self.abort = threading.Event()
 
     # ----------------------------------------------------------------- open / close
@@ -176,6 +176,11 @@ class Link:
         self.ser.write(req)
         # inter_byte_timeout ends a short (exception) answer early
         raw = self.ser.read(expect)
+        # for the connection diagnosis: did anything come back at all, and was
+        # it only our own request echoed by the adapter?
+        self.stats["rx"] += len(raw)
+        if len(raw) >= 6 and raw[:6] == req[:6]:
+            self.stats["echo"] += len(raw)          # bytes that were only our own request
         if len(raw) == expect and not (raw[1] & 0x80):
             lo, hi = crc16(raw[:-2])
             if (raw[-2], raw[-1]) != (lo, hi):

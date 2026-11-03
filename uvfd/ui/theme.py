@@ -134,7 +134,7 @@ QPushButton[kind="primary"]:disabled {{ background: {SURFACE2}; color: {FAINT}; 
 QPushButton[kind="ghost"] {{ background: transparent; border: 1px solid transparent; color: {MUTED}; padding: 6px 10px; }}
 QPushButton[kind="ghost"]:hover {{ background: {RAISED}; color: {TEXT}; }}
 QPushButton[kind="ghost"]:checked {{ background: {RAISED}; color: {TEXT}; border-color: {BORDER}; }}
-QPushButton[kind="nav"] {{ background: {SURFACE2}; border: 1px solid {BORDER}; padding: 8px 16px; }}
+QPushButton[kind="nav"] {{ background: {SURFACE2}; border: 1px solid {BORDER}; padding: 8px 12px; }}
 QPushButton[kind="nav"]:hover {{ background: {HOVER}; }}
 QPushButton[kind="run"] {{
   background: #0F2A27; border: 1px solid #1E5B53; color: {ACCENT}; font-size: 11pt; font-weight: 700;

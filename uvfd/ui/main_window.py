@@ -31,11 +31,28 @@ from .widgets import Banner, Bar, Card, Gauge, KpiTile, Led, StatusPill, Toggle,
 
 log = logging.getLogger("uvfd.ui")
 
-BAUD_CHOICES = [None, 9600, 19200, 38400, 4800, 2400, 57600, 115200]
-FMT_CHOICES = [None, 0, 1, 2, 3]
+# the drives' factory link first: PD-00 = 5 (9600), PD-01 = 0 (8N2)
+BAUD_CHOICES = [9600, 19200, 38400, 4800, 2400, 1200, 57600, 115200, None]
+FMT_CHOICES = [0, 1, 2, 3, None]
 FMT_TEXT = {0: "8N2", 1: "8E1", 2: "8O1", 3: "8N1"}
 
 BASIC_FIELDS = ["P0-02", "P0-03", "P0-10", "P0-12", "P0-14", "P0-17", "P0-18", "P6-10", "P8-13"]
+
+
+class PortCombo(QComboBox):
+    """The port list is read again every time it is opened - no refresh button needed."""
+
+    def __init__(self, refresh):
+        super().__init__()
+        self._refresh = refresh
+
+    def showPopup(self):
+        self._refresh()
+        super().showPopup()
+
+    def paintEvent(self, e):
+        from .common import ElidedCombo
+        ElidedCombo.paintEvent(self, e)
 
 
 class RowSnapScroll(QScrollArea):
@@ -75,11 +92,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("UVFD — Winston WSTG600 / SUSWE SU650")
         from .common import app_icon
         self.setWindowIcon(app_icon())
-        self.setMinimumSize(1280, 780)
+        self.setMinimumSize(1340, 780)
 
         b = self.bus
         b.connected.connect(self.on_connected)
         b.connect_failed.connect(self.on_connect_failed)
+        b.connect_progress.connect(self.on_connect_progress)
         b.disconnected.connect(self.on_disconnected)
         b.snapshot.connect(self.on_snapshot)
         b.values.connect(self.on_values)
@@ -164,10 +182,9 @@ class MainWindow(QMainWindow):
         brand = QVBoxLayout()
         brand.setSpacing(0)
         t = label("UVFD", "Brand")
-        s = label(tr("app_sub"), "BrandSub")
+        t.setToolTip(tr("app_sub"))
         brand.addStretch(1)
         brand.addWidget(t)
-        brand.addWidget(s)
         brand.addStretch(1)
         h.addLayout(brand)
         h.addSpacing(6)
@@ -180,16 +197,24 @@ class MainWindow(QMainWindow):
         oh = QHBoxLayout(off)
         oh.setContentsMargins(0, 0, 0, 0)
         oh.setSpacing(8)
-        self.cb_port = QComboBox()
-        self.cb_port.setMinimumWidth(190)
+        self.cb_port = PortCombo(self.refresh_ports)
+        self.cb_port.setFixedWidth(200)
         self.cb_port.setToolTip(tr("port"))
         self.cb_baud = QComboBox()
         for bd in BAUD_CHOICES:
             self.cb_baud.addItem(tr("auto") if bd is None else str(bd), bd)
+            if bd == 9600:
+                self.cb_baud.setItemData(self.cb_baud.count() - 1, "PD-00 = 5 · " + tr("factory_short"),
+                                         Qt.ToolTipRole)
+        self.cb_baud.setFixedWidth(96)
         self.cb_baud.setToolTip(tr("baud") + " (PD-00)")
         self.cb_fmt = QComboBox()
         for f in FMT_CHOICES:
             self.cb_fmt.addItem(tr("auto") if f is None else FMT_TEXT[f], f)
+            if f is not None:
+                self.cb_fmt.setItemData(self.cb_fmt.count() - 1, "PD-01 = %d%s" % (
+                    f, " · " + tr("factory_short") if f == 0 else ""), Qt.ToolTipRole)
+        self.cb_fmt.setFixedWidth(84)
         self.cb_fmt.setToolTip(tr("format") + " (PD-01)")
         self.sp_addr = QSpinBox()
         self.sp_addr.setRange(1, 247)
@@ -200,13 +225,12 @@ class MainWindow(QMainWindow):
         self.sp_addr.setValue(int(st.get("slave") or 1))
         self.cb_baud.setCurrentIndex(max(0, self.cb_baud.findData(st.get("baud"))))
         self.cb_fmt.setCurrentIndex(max(0, self.cb_fmt.findData(st.get("fmt"))))
-        rp = btn("⟳", "ghost", tr("refresh_ports"))
-        rp.setFixedWidth(34)
-        rp.clicked.connect(self.refresh_ports)
         self.bt_connect = btn(tr("connect"), "primary")
         self.bt_connect.setMinimumWidth(104)
         self.bt_connect.clicked.connect(lambda: self.connect_now())
-        for w in (self.cb_port, rp, self.cb_baud, self.cb_fmt, self.sp_addr, self.bt_connect):
+        self.bt_help = btn("?  " + tr("help_short"), "small", tr("conn_help"))
+        self.bt_help.clicked.connect(self.open_connect_help)
+        for w in (self.cb_port, self.cb_baud, self.cb_fmt, self.sp_addr, self.bt_connect, self.bt_help):
             oh.addWidget(w)
         oh.addStretch(1)
         self.conn_stack.addWidget(off)
@@ -270,6 +294,7 @@ class MainWindow(QMainWindow):
         self.bt_menu = btn("☰", "ghost")
         self.bt_menu.setFixedWidth(38)
         m = QMenu(self)
+        m.addAction(tr("conn_help"), self.open_connect_help)
         m.addAction(tr("bios_window"), self.open_bios)
         m.addAction(tr("prefs"), self.open_prefs)
         m.addSeparator()
@@ -526,7 +551,7 @@ class MainWindow(QMainWindow):
         self.cb_port.setCurrentIndex(i if i >= 0 else 0)
         self.cb_port.blockSignals(False)
 
-    def connect_now(self, demo_variant: str | None = None):
+    def connect_now(self, demo_variant: str | None = None, scan: bool = False):
         port = "DEMO:" + demo_variant if demo_variant else self.cb_port.currentData()
         if not port:
             return
@@ -545,7 +570,41 @@ class MainWindow(QMainWindow):
         self.bt_connect.setText(tr("connecting"))
         self.bus.fast_ms = int(st.get("poll_ms") or 250)
         self.bus.connect_drive(ConnectSpec(port=port, baud=st["baud"], fmt=st["fmt"], slave=st["slave"],
-                                           demo=demo, comm_timeout=float(st.get("comm_timeout") or 0)))
+                                           demo=demo, comm_timeout=float(st.get("comm_timeout") or 0),
+                                           scan=scan))
+        if scan:
+            from .dialogs import ProgressDialog
+            self.scan_dlg = ProgressDialog(self, tr("searching", self.cb_port.currentText().split("·")[0].strip()),
+                                           self.bus, cancel=self.bus.cancel_connect)
+            self.scan_dlg.show()
+
+    def search_drive(self):
+        self.connect_now(scan=True)
+
+    def factory_link(self):
+        self.cb_baud.setCurrentIndex(self.cb_baud.findData(9600))
+        self.cb_fmt.setCurrentIndex(self.cb_fmt.findData(0))
+        self.sp_addr.setValue(1)
+        self.toast(tr("factory_link"))
+
+    def open_connect_help(self):
+        from .connect_help import ConnectHelpDialog
+        on = self.ctx.connected
+        ConnectHelpDialog(self, on_search=None if on else self.search_drive,
+                          on_factory=None if on else self.factory_link).exec()
+
+    def close_scan(self):
+        d = getattr(self, "scan_dlg", None)
+        if d is not None:
+            d.close()
+            self.scan_dlg = None
+
+    def on_connect_progress(self, what: str, n: int, total: int):
+        d = getattr(self, "scan_dlg", None)
+        if d is not None:
+            d.set_progress(n, total, what)
+        else:
+            self.toast(tr("trying", what, n, total))
 
     def disconnect_now(self):
         if self.ctx.running and self.pc_active():
@@ -563,9 +622,15 @@ class MainWindow(QMainWindow):
         self.ctx.link_text = info_["link"]
         self.ctx.absent.clear()
         self.ctx.demo = info_.get("demo")
+        self.close_scan()
         st = self.ctx.settings
-        st["baud"], st["fmt"] = info_["baud"], info_["fmt"]
+        st["baud"], st["fmt"], st["slave"] = info_["baud"], info_["fmt"], info_.get("slave", st.get("slave", 1))
         st.save()
+        for cb, val in ((self.cb_baud, st["baud"]), (self.cb_fmt, st["fmt"])):
+            i = cb.findData(val)
+            if i >= 0:
+                cb.setCurrentIndex(i)
+        self.sp_addr.setValue(int(st["slave"]))
         new = self.ctx.fw.seen(ident.bios_key, ident.model_text)
         self.bt_connect.setEnabled(True)
         self.bt_connect.setText(tr("connect"))
@@ -588,9 +653,14 @@ class MainWindow(QMainWindow):
             self.banner.hide_msg()
 
     def on_connect_failed(self, msg: str):
+        self.close_scan()
         self.bt_connect.setEnabled(True)
         self.bt_connect.setText(tr("connect"))
-        self.banner.show_msg(msg, th.RED, "✕")
+        b_help = btn(tr("help_short"), "small")
+        b_help.clicked.connect(self.open_connect_help)
+        b_find = btn(tr("find_drive"), "small")
+        b_find.clicked.connect(self.search_drive)
+        self.banner.show_msg(msg, th.RED, "✕", [b_find, b_help])
 
     def on_disconnected(self, _msg: str):
         self.ctx.identity = None

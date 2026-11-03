@@ -218,6 +218,51 @@ def test_snapshot_roundtrip_and_vfdtool_import():
         assert profs and all(len(p.values) > 100 for p in profs)
 
 
+def test_find_drive_on_other_address():
+    from uvfd.bus import ConnectSpec
+    bus = _bus_with("21")
+    bus.link.close()
+    bus.sim = SimDrive(CAT, "21", slave=3)                     # drive at address 3, we start at 1
+    got = []
+    bus.connected.connect(lambda info: got.append(info))
+    bus._do_connect(ConnectSpec(port="DEMO", baud=9600, fmt=0, slave=1, demo="21", scan=True,
+                                comm_timeout=0))
+    assert got and got[0]["slave"] == 3 and got[0]["identity"].sw == 21
+
+
+def test_connect_diagnosis():
+    from uvfd.bus import ConnectSpec
+    bus = _bus_with("21")
+    bus.link.close()
+    bus.sim = SimDrive(CAT, "21", slave=5)                     # wrong address -> nothing comes back
+    fails = []
+    bus.connect_failed.connect(fails.append)
+    bus._do_connect(ConnectSpec(port="DEMO", baud=9600, fmt=0, slave=1, demo="21", comm_timeout=0))
+    assert fails and "НИКАКОВ" in fails[0] and "#1" in fails[0]
+    spec = ConnectSpec(port="COM9", baud=9600, fmt=0, slave=1)
+    bus.link.stats.update(rx=48, echo=48)                      # only our own frames came back
+    assert "ехо" in bus._diagnosis(spec)
+    bus.link.stats.update(rx=50, echo=0)                       # bytes, but unreadable
+    assert "брзината (PD-00)" in bus._diagnosis(spec)
+
+
+def test_settings_move_to_factory_link_once():
+    import json
+    tmp = Path(tempfile.mkdtemp())
+    old = paths.DATA
+    store.paths.DATA = tmp
+    try:
+        (tmp / "settings.json").write_text(json.dumps({"lang": "en", "baud": None, "fmt": 3, "slave": 7}),
+                                           encoding="utf-8")
+        st = store.Settings()
+        assert (st["baud"], st["fmt"], st["slave"], st["lang"]) == (9600, 0, 1, "en")
+        st["slave"] = 4
+        st.save()
+        assert store.Settings()["slave"] == 4                    # only once - a later choice stays
+    finally:
+        store.paths.DATA = old
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

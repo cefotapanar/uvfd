@@ -41,6 +41,8 @@ class ConnectSpec:
     slave: int = 1
     demo: str | None = None          # BIOS variant for the simulator
     comm_timeout: float = 2.0        # PD-04 while the PC drives the motor; 0 = leave it
+    scan: bool = False               # search every baud / format / address 1..max_addr
+    max_addr: int = 10
 
 
 @dataclass
@@ -67,6 +69,7 @@ class Job:
 class Bus(QObject):
     connected = Signal(object)            # dict: identity, values, link text
     connect_failed = Signal(str)
+    connect_progress = Signal(str, int, int)   # what is being tried, n, total
     disconnected = Signal(str)
     snapshot = Signal(object)             # drive.Snapshot
     values = Signal(object, str)          # {code: raw}, why ("basics", "totals", "group", ...)
@@ -87,6 +90,7 @@ class Bus(QObject):
         self.requests: queue.Queue = queue.Queue()
         self.job: Job | None = None
         self.cancel_flag = threading.Event()
+        self.scan_cancel = threading.Event()
         self.wake = threading.Event()
         self.stop_flag = threading.Event()
         self.fast_ms = 250
@@ -112,6 +116,9 @@ class Bus(QObject):
     def connect_drive(self, spec: ConnectSpec):
         self.requests.put(("connect", spec))
         self.wake.set()
+
+    def cancel_connect(self):
+        self.scan_cancel.set()
 
     def disconnect_drive(self, restore_timeout: bool = True):
         self.link.abort.set()
@@ -216,7 +223,7 @@ class Bus(QObject):
         return mk if self.lang() == "mk" else en
 
     # ======================================================== connect / disconnect
-    def _open(self, spec: ConnectSpec, baud: int, fmt: int):
+    def _open(self, spec: ConnectSpec, baud: int, fmt: int, timeout: float = 0.35):
         parity, stop = FORMATS[fmt]
         if spec.demo:
             from .sim import SimDrive, SimSerial
@@ -224,7 +231,7 @@ class Bus(QObject):
                 self.sim = SimDrive(self.cat, spec.demo, slave=spec.slave)
             self.link.open("DEMO", baud, parity, stop, spec.slave, serial_obj=SimSerial(self.sim))
         else:
-            self.link.open(spec.port, baud, parity, stop, spec.slave)
+            self.link.open(spec.port, baud, parity, stop, spec.slave, timeout=timeout)
 
     def _probe(self) -> bool:
         try:
@@ -243,30 +250,25 @@ class Bus(QObject):
         self.bad_u0.clear()
         self.values_cache.clear()
         self.pd04_orig, self.pd04_set = None, False
-        bauds = [spec.baud] if spec.baud else [9600, 19200, 38400, 4800, 57600, 115200, 2400]
-        fmts = [spec.fmt] if spec.fmt is not None else [0, 1, 3, 2]
+        for k in self.link.stats:
+            self.link.stats[k] = 0
+        self.scan_cancel.clear()
         try:
-            found = False
-            for b in bauds:
-                for f in fmts:
-                    self._open(spec, b, f)
-                    if self._probe():
-                        found = True
-                        break
-                    self.link.close()
-                if found:
-                    break
+            found = self._search(spec) if spec.scan else self._try(spec)
+            if found is None:                       # cancelled
+                self.link.close()
+                self.connect_failed.emit(self._t("Пребарувањето е прекинато.", "Search cancelled."))
+                return
             if not found:
                 self.link.close()
-                self.connect_failed.emit(self._t(
-                    "Фреквентниот не одговара. Провери: напојување, A/B жици (замени ги), "
-                    "адреса PD-02, брзина PD-00 и формат PD-01.",
-                    "The drive does not answer. Check: power, A/B wires (swap them), "
-                    "address PD-02, baud PD-00 and format PD-01."))
+                self.connect_failed.emit(self._diagnosis(spec))
                 return
         except Exception as e:
             self.link.close()
-            self.connect_failed.emit(self._t("Портата не може да се отвори: ", "Cannot open the port: ") + str(e))
+            self.connect_failed.emit(self._t("Портата %s не може да се отвори (можеби ја држи друга програма, "
+                                             "на пр. VFDTool): " % spec.port,
+                                             "Cannot open %s (another program, e.g. VFDTool, may hold it): "
+                                             % spec.port) + str(e))
             return
 
         vals = self.read_codes(D.IDENTITY + D.BASICS + D.TOTALS)
@@ -280,12 +282,85 @@ class Bus(QObject):
             "values": vals,
             "link": self.link.describe(),
             "baud": self.link.baud,
+            "slave": self.link.slave,
             "fmt": next(k for k, v in FORMATS.items() if v == (self.link.parity, self.link.stopbits)),
             "demo": spec.demo,
         }
         self.fail_streak, self.link_ok = 0, True
         log.info("connected %s, BIOS %s", self.link.describe(), info["identity"].bios_key)
         self.connected.emit(info)
+
+    FMT_NAME = {0: "8N2", 1: "8E1", 2: "8O1", 3: "8N1"}
+    SEARCH_BAUDS = [9600, 19200, 38400, 4800, 2400, 1200, 57600, 115200]
+    SEARCH_FMTS = [0, 1, 3, 2]
+
+    def _try(self, spec: ConnectSpec) -> bool:
+        """The chosen settings ("Auto" tries every baud / format at the chosen address)."""
+        bauds = [spec.baud] if spec.baud else self.SEARCH_BAUDS
+        fmts = [spec.fmt] if spec.fmt is not None else self.SEARCH_FMTS
+        total, n = len(bauds) * len(fmts), 0
+        for b in bauds:
+            for f in fmts:
+                if self.scan_cancel.is_set():
+                    return None
+                n += 1
+                self.connect_progress.emit("%d %s #%d" % (b, self.FMT_NAME[f], spec.slave), n, total)
+                self._open(spec, b, f, timeout=0.35 if total == 1 else 0.25)
+                if self._probe():
+                    return True
+                self.link.close()
+        return False
+
+    def _search(self, spec: ConnectSpec) -> bool:
+        """
+        Every baud x format, address 1 first (factory), then 2..max_addr.
+        The port is opened once per baud/format; only the address changes.
+        """
+        passes = [[spec.slave] if spec.slave != 1 else [1]]
+        rest = [a for a in range(1, spec.max_addr + 1) if a not in passes[0]]
+        if rest:
+            passes.append(rest)
+        total = sum(len(p) for p in passes) * len(self.SEARCH_BAUDS) * len(self.SEARCH_FMTS)
+        n = 0
+        for addrs in passes:
+            for b in self.SEARCH_BAUDS:
+                for f in self.SEARCH_FMTS:
+                    self._open(spec, b, f, timeout=0.2)
+                    for a in addrs:
+                        if self.scan_cancel.is_set():
+                            return None
+                        n += 1
+                        self.link.slave = a
+                        self.connect_progress.emit("%d %s #%d" % (b, self.FMT_NAME[f], a), n, total)
+                        if self._probe():
+                            spec.slave = a
+                            return True
+                    self.link.close()
+        return False
+
+    def _diagnosis(self, spec: ConnectSpec) -> str:
+        """What the failure most likely is, from what came back on the wire."""
+        s = self.link.stats
+        tried = "%s · %s" % (spec.port, self._t("сите брзини, формати и адреси 1–%d" % spec.max_addr,
+                                                 "every baud, format and address 1–%d" % spec.max_addr)) \
+            if spec.scan else "%s · %s %s · #%d" % (spec.port, spec.baud or self._t("авто", "auto"),
+                                                    self.FMT_NAME.get(spec.fmt, self._t("авто", "auto")), spec.slave)
+        if s["rx"] == 0:
+            why = self._t("Нема НИКАКОВ сигнал назад. Најчесто: A и B се заменети (замени ги), фреквентниот "
+                          "не е вклучен, или е избрана погрешна порта.",
+                          "NOTHING comes back. Most often: A and B are swapped (swap them), the drive is not "
+                          "powered, or the wrong port is selected.")
+        elif s["echo"] and s["echo"] >= s["rx"] * 0.8:
+            why = self._t("Адаптерот го враќа само тоа што праќаме (ехо) - фреквентниот не одговара. Провери "
+                          "A/B, адресата (PD-02) и на SU650 PD-08 = 0 (Slave).",
+                          "The adapter only echoes what we send - the drive does not answer. Check A/B, the "
+                          "address (PD-02) and on SU650 PD-08 = 0 (Slave).")
+        else:
+            why = self._t("Стигнува сигнал, но не се разбира - брзината (PD-00) или форматот (PD-01) не се исти "
+                          "како во програмата, или PD-05 не е 1. Пробај „Пребарај фреквентен“.",
+                          "Something comes back but cannot be read - baud (PD-00) or format (PD-01) differ from "
+                          "the program, or PD-05 is not 1. Try “Find drive”.")
+        return self._t("Нема одговор (%s). " % tried, "No answer (%s). " % tried) + why
 
     def _do_disconnect(self, restore_timeout: bool):
         if self.job is not None:

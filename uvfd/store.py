@@ -47,12 +47,17 @@ def _read_json(path: Path, default):
 
 # ============================================================ settings
 
+#: The drives' own factory link: PD-00 = 5 (9600), PD-01 = 0 (8N2), PD-02 = 1.
+FACTORY_LINK = {"baud": 9600, "fmt": 0, "slave": 1}
+CONN_V = 2
+
 DEFAULTS = {
     "lang": "mk",
     "port": "",
     "baud": 9600,            # None = auto
     "fmt": 0,                # PD-01: 0=8N2 1=8E1 2=8O1 3=8N1, None = auto
     "slave": 1,
+    "conn_v": CONN_V,
     "comm_timeout": 2.0,     # PD-04 while the PC runs the motor
     "poll_ms": 250,
     "pc_restore": {},        # P0-02 / P0-03 to go back to when PC control is switched off
@@ -70,6 +75,11 @@ class Settings(dict):
         data = _read_json(self.path, {})
         if isinstance(data, dict):
             self.update(data)
+            # 1.1.0: the link starts at the drives' factory setting (PD-00=5 9600,
+            # PD-01=0 8N2, PD-02=1) - once, also for installations from 1.0.0
+            if data and data.get("conn_v", 1) < CONN_V:
+                self.update(FACTORY_LINK)
+                self["conn_v"] = CONN_V
 
     def save(self):
         _write_json(self.path, dict(self))
