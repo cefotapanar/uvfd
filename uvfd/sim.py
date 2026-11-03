@@ -40,6 +40,9 @@ VARIANTS = {
         "P7-13": 3, "P7-14": 8, "P8-13": 1, "P9-14": 10, "P9-15": 9, "P9-16": 9, "PD-06": 0,
     },
 }
+#: (BIOS, P7-10) of the simulated drives - a DEMO connection is never a real drive.
+DEMO_IDS = {(k, str(v["P7-10"])) for k, v in VARIANTS.items()}
+
 # BIOS 502 knows a few registers 21 does not, and lost one.
 EXTRA = {"502": {"P7-15": 1, "P7-16": 0, "P8-54": 0, "PA-29": 0}}
 MISSING = {"502": {"P4-40"}, "21": {"PA-29"}}

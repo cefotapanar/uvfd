@@ -728,7 +728,8 @@ class MainWindow(QMainWindow):
             if i >= 0:
                 cb.setCurrentIndex(i)
         self.sp_addr.setValue(int(st["slave"]))
-        new = self.ctx.fw.seen(ident.bios_key, ident.model_text)
+        # a DEMO drive is not a drive - it never goes into the BIOS registry
+        new = False if self.ctx.demo else self.ctx.fw.seen(ident.bios_key, ident.model_text)
         self.bt_connect.setEnabled(True)
         self.bt_connect.setText(tr("connect"))
         for t in self.kpi.values():
@@ -799,7 +800,7 @@ class MainWindow(QMainWindow):
             self.bios_box.addWidget(b_)
             if key == self.ctx.fw.base:
                 self.bios_box.addWidget(chip(tr("bios_base"), th.VIOLET), 0, Qt.AlignVCenter)
-            elif self.ctx.fw.versions.get(key, {}).get("seen", 0) <= 1:
+            elif self.ctx.fw.is_new(key):
                 self.bios_box.addWidget(chip(tr("bios_new"), th.AMBER, filled=True), 0, Qt.AlignVCenter)
         else:
             self.pill.set_state(tr("st_offline"), th.FAINT, False)
@@ -1122,6 +1123,8 @@ class MainWindow(QMainWindow):
             self.close_progress()
             key = self.ctx.identity.bios_key if self.ctx.identity else "?"
             ranges = {g.g: min(99, g.max_index + 8) for g in self.ctx.cat.groups}
+            if self.ctx.demo:
+                return
             self.ctx.fw.record_scan(key, result, ranges)
             for code in result:
                 self.ctx.cat.ensure(code)

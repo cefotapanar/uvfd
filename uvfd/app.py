@@ -78,6 +78,13 @@ def main(argv=None):
 
     cat = Catalog.load()
     fw = FirmwareRegistry()
+    fw.drop_demo_artifacts()
+    try:
+        import json as _json
+        from .paths import resource
+        fw.merge_seed(_json.loads(resource("firmware_seed.json").read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        pass
     for v in fw.versions.values():                       # registers found by earlier scans
         for code in ((v.get("scan") or {}).get("present") or []):
             cat.ensure(code)

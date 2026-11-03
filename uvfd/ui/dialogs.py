@@ -362,6 +362,9 @@ class BiosDialog(Dialog):
 
     def on_done(self, tag, result):
         k = self.ctx.identity.bios_key if self.ctx.identity else None
+        if self.ctx.demo and tag in ("scan:bios", "read:factory"):
+            self.status.setText("ДЕМО — не се запишува" if i18n.lang() == "mk" else "DEMO — not recorded")
+            return
         if tag == "scan:bios" and k:
             ranges = {g.g: min(99, g.max_index + 8) for g in self.ctx.cat.groups}
             self.ctx.fw.record_scan(k, result, ranges)

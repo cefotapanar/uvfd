@@ -529,6 +529,83 @@ def test_spec_packs_every_resource():
             assert any(fnmatch.fnmatch(f.name, pat) for pat in patterns), f.name + " is not packed into the exe"
 
 
+def _seed():
+    import json
+    return json.loads((ROOT / "uvfd/resources/firmware_seed.json").read_text(encoding="utf-8"))
+
+
+def test_shipped_bios_are_known_and_demo_502_goes():
+    """The user's install: a DEMO '502' became the base; the real 18/712/21/20000 ship with UVFD."""
+    import json
+    tmp = Path(tempfile.mkdtemp()) / "fw.json"
+    tmp.write_text(json.dumps({"schema": "uvfd-firmware/1", "base": "502", "versions": {
+        "502": {"sw": "502", "models": ["1.01"], "seen": 1, "scan": None, "factory": {}}}}), encoding="utf-8")
+    reg = store.FirmwareRegistry(tmp)
+    assert reg.drop_demo_artifacts() == ["502"] and reg.base == ""
+    added = reg.merge_seed(_seed())
+    assert set(added) >= {"18", "21", "712", "20000"} and reg.base == "18"
+    assert not reg.is_new("21")
+    assert reg.seen("21", "209") is False                      # known - not "new"
+    assert reg.seen("4242", "7") is True                       # a really new one still is
+    codes = {p.code for p in CAT.params}
+    assert "P6-24" in reg.diff("21", codes)                    # 21 = 18 + P6-24, from the real scans
+    reg2 = store.FirmwareRegistry(tmp)
+    assert reg2.base == "18" and "502" not in reg2.versions
+
+
+def test_seed_keeps_the_users_scanned_base():
+    import json
+    tmp = Path(tempfile.mkdtemp()) / "fw.json"
+    tmp.write_text(json.dumps({"base": "21", "versions": {"21": {"sw": "21", "models": ["209"], "seen": 3,
+                                                                  "scan": {"date": "", "present": ["P0-00"],
+                                                                           "ranges": {}, "values": {}}}}}),
+                   encoding="utf-8")
+    reg = store.FirmwareRegistry(tmp)
+    reg.versions["21"]["seen"] = 1                             # met once here - would be "new"
+    reg.merge_seed(_seed())
+    assert reg.base == "21" and reg.versions["21"]["scan"]["present"] == ["P0-00"]   # nothing overwritten
+    assert not reg.is_new("21")                                # but it ships with UVFD -> known
+
+
+def test_harvest_reads_only_and_strips_settings():
+    import json
+    import shutil
+    sys.path.insert(0, str(ROOT / "tools"))
+    from harvest_bios import harvest
+    tmp = Path(tempfile.mkdtemp())
+    src = tmp / "installed.json"
+    src.write_text(json.dumps({"base": "502", "versions": {
+        "502": {"sw": "502", "models": ["101"], "seen": 1, "scan": None},
+        "77": {"sw": "77", "models": ["5.55"], "seen": 2, "note": "Клиент X",
+               "scan": {"date": "d", "present": ["P0-00", "P1-01", "PE-99"], "ranges": {"0": 5},
+                        "values": {"P0-00": 1, "P1-01": 300, "PE-99": 7}}}},
+        "models": {"555": {"model": "G600-4T45G", "kw": 45, "note": "кај клиент X"}}}), encoding="utf-8")
+    before = src.read_bytes()
+    seed = tmp / "seed.json"
+    shutil.copy(ROOT / "uvfd/resources/firmware_seed.json", seed)
+    r = harvest([src], seed)
+    assert src.read_bytes() == before                          # the installation is never changed
+    assert "77" in r["added"] and "502" not in r["added"]      # DEMO identity is not a drive
+    s = json.loads(seed.read_text(encoding="utf-8"))
+    v = s["versions"]["77"]
+    assert v["models"] == ["555"] and v["note"] == ""
+    assert v["scan"]["values"] == {"PE-99": 7}                 # no ordinary settings in a public repo
+    assert "note" not in s["models"]["555"]
+    assert harvest([src], seed)["changed"] is False            # second run: nothing new
+
+
+def test_demo_connection_is_not_recorded():
+    old = (paths.DATA, paths.SNAPSHOTS)
+    try:
+        app, win, bus = _main_window(Path(tempfile.mkdtemp()))
+        win.connect_now(demo_variant="502")
+        assert _wait(app, lambda: win.ctx.connected, 10)
+        assert win.ctx.fw.versions == {} and win.ctx.fw.base == ""
+        bus.shutdown()
+    finally:
+        store.paths.DATA, store.paths.SNAPSHOTS = old
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

@@ -7,6 +7,10 @@ Builds UVFD.exe and the update package.
                                 release vX.Y.Z with UVFD.zip + uvfd.json -
                                 every running UVFD then offers the update
 
+Every build first collects the BIOS versions the installed UVFD has met on
+real drives (C:\\UVFD\\data\\firmware.json, tools/harvest_bios.py) into the
+package, so the next version already knows them; --release commits that.
+
 New version: raise VERSION and write CHANGES in uvfd/version.py first.
 The self-test runs before anything is built; a failing test stops the build.
 """
@@ -39,6 +43,32 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 def run(cmd, **kw):
     print("›", " ".join(str(c) for c in cmd))
     return subprocess.run(cmd, cwd=HERE, check=True, **kw)
+
+
+INSTALLED_FW = Path(r"C:\UVFD\data\firmware.json")
+
+
+def harvest_bios(commit: bool):
+    """New BIOS versions from the installed UVFD go into this build."""
+    sys.path.insert(0, str(HERE / "tools"))
+    from harvest_bios import SEED, harvest
+    r = harvest([INSTALLED_FW])
+    news = r["added"] + r["filled"]
+    print("BIOS: %d known, base %s; new from %s: %s" % (
+        r["total"], r["base"] or "-", INSTALLED_FW, ", ".join(news) or "none"))
+    if r["changed"] and commit:
+        run(["git", "add", str(SEED.relative_to(HERE))])
+        run(["git", "commit", "-m",
+             "BIOS од инсталираната UVFD: %s\n\nСобрано автоматски од build.py --release "
+             "(tools/harvest_bios.py).\n\nCo-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+             % (", ".join(news) or "основна " + r["base"])])
+    return r
+
+
+def ensure_clean():
+    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=HERE, capture_output=True, text=True).stdout.strip()
+    if dirty:
+        sys.exit("✕ Има некомитирани измени — прво commit, па --release.\n" + dirty)
 
 
 def selftest():
@@ -84,9 +114,7 @@ def pack() -> Path:
 
 
 def release(zip_path: Path):
-    dirty = subprocess.run(["git", "status", "--porcelain"], cwd=HERE, capture_output=True, text=True).stdout.strip()
-    if dirty:
-        sys.exit("✕ Има некомитирани измени — прво commit, па --release.\n" + dirty)
+    ensure_clean()
     run(["git", "push", "origin", "HEAD"])
     notes = "\n".join("- " + c for c in CHANGES.get("mk", [])) + "\n\n" + \
             "\n".join("- " + c for c in CHANGES.get("en", []))
@@ -100,6 +128,9 @@ if __name__ == "__main__":
     ap.add_argument("--release", action="store_true")
     ap.add_argument("--skip-tests", action="store_true")
     a = ap.parse_args()
+    if a.release:
+        ensure_clean()
+    harvest_bios(commit=a.release)
     if not a.skip_tests:
         selftest()
     build()

@@ -201,6 +201,21 @@ def import_vfdtool(path: Path) -> list[SnapshotFile]:
 FW_SCHEMA = "uvfd-firmware/1"
 
 
+def norm_models(models: list) -> list[str]:
+    """Model numbers as the drive sends them: 1.0.0 stored '2.09' for P7-10 = 209."""
+    out = []
+    for m in models:
+        s = str(m)
+        if "." in s:
+            try:
+                s = str(int(round(float(s) * 100)))
+            except ValueError:
+                pass
+        if s not in out:
+            out.append(s)
+    return out
+
+
 class FirmwareRegistry:
     """
     Every BIOS (software version, P7-11) seen on a drive. The BASE version is
@@ -217,6 +232,80 @@ class FirmwareRegistry:
         self.versions: dict[str, dict] = d.get("versions", {}) if isinstance(d, dict) else {}
         # P7-10 "Model No." -> what that drive turned out to be (from a nameplate once)
         self.models: dict[str, dict] = d.get("models", {}) if isinstance(d, dict) else {}
+        for v in self.versions.values():
+            v["models"] = norm_models(v.get("models") or [])
+
+    # -------------------------------------------------------------- knowledge shipped with UVFD
+    def drop_demo_artifacts(self) -> list[str]:
+        """
+        Up to 1.3.x a DEMO connection was recorded like a real drive. An
+        unscanned version carrying exactly a simulator identity (BIOS + model
+        number of the DEMO drive) is that - it goes. A real drive with the same
+        identity only shows up as new once more; a scanned one is never touched.
+        """
+        from .sim import DEMO_IDS
+        gone = []
+        for key, v in list(self.versions.items()):
+            models = set(v.get("models") or [])
+            if not v.get("scan") and models and all((key, m) in DEMO_IDS for m in models):
+                del self.versions[key]
+                gone.append(key)
+        if self.base in gone:
+            self.base = ""
+        if gone:
+            self.save()
+        return gone
+
+    def most_basic(self) -> str:
+        """The scanned version with the fewest registers - the natural reference."""
+        scanned = [(len(v["scan"]["present"]), k) for k, v in self.versions.items() if v.get("scan")]
+        return min(scanned)[1] if scanned else ""
+
+    def merge_seed(self, seed: dict) -> list[str]:
+        """
+        BIOS versions shipped inside UVFD (resources/firmware_seed.json, built
+        from real drives by tools/harvest_bios.py). They become KNOWN - never
+        "new" - and fill in scans this installation does not have. A base the
+        user picked stays, unless it was never scanned and the shipped one was.
+        """
+        added, changed = [], False
+        for key, sv in (seed.get("versions") or {}).items():
+            lv = self.versions.get(key)
+            if lv is None:
+                v = json.loads(json.dumps(sv))
+                v["from_package"] = True
+                v["seen"] = 0
+                self.versions[key] = v
+                added.append(key)
+                changed = True
+                continue
+            if not lv.get("from_package"):
+                lv["from_package"] = True              # shipped with UVFD = known, never "new"
+                changed = True
+            for part in ("scan", "factory"):
+                if not lv.get(part) and sv.get(part):
+                    lv[part] = json.loads(json.dumps(sv[part]))
+                    changed = True
+            for m in sv.get("models") or []:
+                if m not in lv.setdefault("models", []):
+                    lv["models"].append(m)
+                    changed = True
+        for mno, lab in (seed.get("models") or {}).items():
+            if mno not in self.models:
+                self.models[mno] = lab
+                changed = True
+        seed_base = seed.get("base") or ""
+        if (not self.base or not self.scanned(self.base)) and seed_base and self.scanned(seed_base) \
+                and self.base != seed_base:
+            self.base = seed_base
+            changed = True
+        if changed:
+            self.save()
+        return added
+
+    def is_new(self, key: str) -> bool:
+        v = self.versions.get(key) or {}
+        return v.get("seen", 0) <= 1 and not v.get("from_package")
 
     def save(self):
         _write_json(self.path, {"schema": FW_SCHEMA, "base": self.base, "versions": self.versions,
