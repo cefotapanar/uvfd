@@ -98,6 +98,7 @@ class MainWindow(QMainWindow):
         b.connected.connect(self.on_connected)
         b.connect_failed.connect(self.on_connect_failed)
         b.connect_progress.connect(self.on_connect_progress)
+        b.connect_cancelled.connect(self.on_connect_cancelled)
         b.disconnected.connect(self.on_disconnected)
         b.snapshot.connect(self.on_snapshot)
         b.values.connect(self.on_values)
@@ -651,6 +652,12 @@ class MainWindow(QMainWindow):
             self.banner.show_msg(text, th.VIOLET, "◆", [b_])
         else:
             self.banner.hide_msg()
+
+    def on_connect_cancelled(self):
+        self.close_scan()
+        self.bt_connect.setEnabled(True)
+        self.bt_connect.setText(tr("connect"))
+        self.toast(tr("search_cancelled"))
 
     def on_connect_failed(self, msg: str):
         self.close_scan()

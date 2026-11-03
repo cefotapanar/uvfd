@@ -293,6 +293,63 @@ def test_progress_dialog_closes():
     assert FakeBus.cancelled == 2                       # finish() does not cancel a finished job
 
 
+def _main_window(tmp):
+    """A real MainWindow (offscreen) on a temp data folder, with its own bus."""
+    import os
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    store.paths.DATA = tmp
+    store.paths.SNAPSHOTS = tmp / "snapshots"
+    from uvfd.bus import Bus
+    from uvfd.ui import theme as th
+    from uvfd.ui.common import Ctx
+    from uvfd.ui.main_window import MainWindow
+    th.init_fonts()
+    bus = Bus(CAT)
+    ctx = Ctx(cat=CAT, bus=bus, settings=store.Settings(), fw=store.FirmwareRegistry(tmp / "fw.json"))
+    ctx.settings["check_updates"] = False
+    win = MainWindow(ctx)
+    return app, win, bus
+
+
+def _wait(app, cond, seconds):
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < seconds:
+        app.processEvents()
+        if cond():
+            return True
+        time.sleep(0.01)
+    return cond()
+
+
+def test_search_cancel_closes_and_frees_the_app():
+    """The user hit this twice: Cancel / X during "Find drive" left a window nothing could close."""
+    old_data, old_snaps = paths.DATA, paths.SNAPSHOTS
+    try:
+        for how in ("cancel_button", "x"):
+            app, win, bus = _main_window(Path(tempfile.mkdtemp()))
+            bus.sim = SimDrive(CAT, "21", slave=200)              # never found at 1..10
+            win.cb_port.addItem("DEMO 21", "DEMO:21")
+            win.cb_port.setCurrentIndex(win.cb_port.count() - 1)
+            win.search_drive()
+            dlg = win.scan_dlg
+            assert _wait(app, lambda: dlg.bar.value() > 3, 10), "search did not start"
+            if how == "x":
+                dlg.close()
+            else:
+                dlg.reject()
+            assert _wait(app, lambda: not dlg.isVisible(), 3), how + ": window still open"
+            assert _wait(app, lambda: win.bt_connect.isEnabled(), 5), how + ": app stuck in connecting"
+            assert not bus.is_connected
+            assert win.banner.kind == "", "a cancel is not an error"
+            win.bus.shutdown()
+            win.deleteLater()
+            app.processEvents()
+    finally:
+        store.paths.DATA, store.paths.SNAPSHOTS = old_data, old_snaps
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

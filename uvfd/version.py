@@ -7,7 +7,7 @@ New version: raise VERSION, write CHANGES (newest first), then
 and offers the update.
 """
 
-VERSION = "1.1.1"
+VERSION = "1.1.2"
 
 #: GitHub repository the updater reads releases from (must be public).
 REPO = "cefotapanar/uvfd"
@@ -17,7 +17,9 @@ REPO = "cefotapanar/uvfd"
 #: still shows everything.
 CHANGES = {
     "mk": [
-        "Поправено: прозорецот за напредок (Скенирај BIOS, Прочитај, Пребарај фреквентен) се заглавуваше "
+        "„Пребарај фреквентен“: „Откажи“ и X среде пребарување сега го затвораат прозорецот и програмата "
+        "веднаш е слободна; откажувањето се јавува мирно, не како црвена грешка.",
+        "(1.1.1) Поправено: прозорецот за напредок (Скенирај BIOS, Прочитај, Пребарај фреквентен) се заглавуваше "
         "на 100% и не се затвораше ни со X. Сега се затвора сам кога ќе заврши, а X/Esc/Откажи ја прекинуваат "
         "работата и го затвораат.",
         "(1.1.0) Помош за поврзување (копче „Помош“ до „Поврзи“): ожичување, сите PD параметри што се за што и што "
@@ -32,7 +34,9 @@ CHANGES = {
         "категории со пребарување, Read/Load на сите параметри, следење на BIOS верзии.",
     ],
     "en": [
-        "Fixed: the progress window (Scan BIOS, Read, Find drive) stuck at 100% and could not be closed, "
+        "“Find drive”: Cancel and X during a search now close the window and free the program at once; "
+        "a cancel is reported quietly, not as a red error.",
+        "(1.1.1) Fixed: the progress window (Scan BIOS, Read, Find drive) stuck at 100% and could not be closed, "
         "not even with X. It now closes by itself when done, and X/Esc/Cancel stop the job and close it.",
         "(1.1.0) Connection help (“Help” next to “Connect”): wiring, every PD parameter and what the "
         "drive must hold, what 8N2 is (PD-01 = 0), keypad steps, the computer's ports and a checklist.",

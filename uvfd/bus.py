@@ -70,6 +70,7 @@ class Bus(QObject):
     connected = Signal(object)            # dict: identity, values, link text
     connect_failed = Signal(str)
     connect_progress = Signal(str, int, int)   # what is being tried, n, total
+    connect_cancelled = Signal()
     disconnected = Signal(str)
     snapshot = Signal(object)             # drive.Snapshot
     values = Signal(object, str)          # {code: raw}, why ("basics", "totals", "group", ...)
@@ -255,9 +256,9 @@ class Bus(QObject):
         self.scan_cancel.clear()
         try:
             found = self._search(spec) if spec.scan else self._try(spec)
-            if found is None:                       # cancelled
+            if found is None:                       # cancelled - not an error
                 self.link.close()
-                self.connect_failed.emit(self._t("Пребарувањето е прекинато.", "Search cancelled."))
+                self.connect_cancelled.emit()
                 return
             if not found:
                 self.link.close()

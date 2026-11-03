@@ -30,6 +30,7 @@ T = {
     "conn_help": ("Помош за поврзување", "Connection help"),
     "help_short": ("Помош", "Help"),
     "find_drive": ("Пребарај фреквентен", "Find drive"),
+    "search_cancelled": ("Пребарувањето е откажано.", "Search cancelled."),
     "find_drive_tip": ("Ги пробува сите брзини, формати и адреси 1–10 на избраната порта",
                        "Tries every baud, format and address 1–10 on the selected port"),
     "factory_link": ("Фабрички: 9600 · 8N2 · #1", "Factory: 9600 · 8N2 · #1"),
