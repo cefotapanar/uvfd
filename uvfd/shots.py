@@ -164,4 +164,5 @@ class Shooter:
 
     def quit(self):
         self.win.bus.command(D.CMD_STOP)
-        QTimer.singleShot(400, self.win.close)
+        QTimer.singleShot(300, lambda: self.win.bus.disconnect_drive(True))
+        QTimer.singleShot(900, self.win.close)

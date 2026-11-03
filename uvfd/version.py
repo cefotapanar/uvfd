@@ -7,7 +7,7 @@ New version: raise VERSION, write CHANGES (newest first), then
 and offers the update.
 """
 
-VERSION = "1.1.2"
+VERSION = "1.2.0"
 
 #: GitHub repository the updater reads releases from (must be public).
 REPO = "cefotapanar/uvfd"
@@ -17,7 +17,10 @@ REPO = "cefotapanar/uvfd"
 #: still shows everything.
 CHANGES = {
     "mk": [
-        "„Пребарај фреквентен“: „Откажи“ и X среде пребарување сега го затвораат прозорецот и програмата "
+        "„Прекини“ (и затворање на програмата): ако PC управувањето го вклучи UVFD на тој фреквентен, прашува "
+        "дали да го врати претходниот режим (P0-02 и P0-03 какви што биле). Ако моторот работи, прво го запира. "
+        "Ако фреквентниот веќе бил во PC режим, не прашува ништо.",
+        "(1.1.2) „Пребарај фреквентен“: „Откажи“ и X среде пребарување сега го затвораат прозорецот и програмата "
         "веднаш е слободна; откажувањето се јавува мирно, не како црвена грешка.",
         "(1.1.1) Поправено: прозорецот за напредок (Скенирај BIOS, Прочитај, Пребарај фреквентен) се заглавуваше "
         "на 100% и не се затвораше ни со X. Сега се затвора сам кога ќе заврши, а X/Esc/Откажи ја прекинуваат "
@@ -34,7 +37,10 @@ CHANGES = {
         "категории со пребарување, Read/Load на сите параметри, следење на BIOS верзии.",
     ],
     "en": [
-        "“Find drive”: Cancel and X during a search now close the window and free the program at once; "
+        "“Disconnect” (and closing the program): if UVFD turned PC control on for that drive, it asks whether "
+        "to restore the previous mode (P0-02 and P0-03 as they were), stopping the motor first if it runs. "
+        "If the drive was already in PC mode, nothing is asked.",
+        "(1.1.2) “Find drive”: Cancel and X during a search now close the window and free the program at once; "
         "a cancel is reported quietly, not as a red error.",
         "(1.1.1) Fixed: the progress window (Scan BIOS, Read, Find drive) stuck at 100% and could not be closed, "
         "not even with X. It now closes by itself when done, and X/Esc/Cancel stop the job and close it.",

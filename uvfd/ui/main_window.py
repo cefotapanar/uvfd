@@ -26,7 +26,7 @@ from ..i18n import tr
 from ..modbus import FORMATS, list_ports
 from ..version import VERSION
 from . import theme as th
-from .common import Ctx, ParamEditor, ask, btn, chip, info, label, set_prop
+from .common import Ctx, ParamEditor, ask, btn, chip, choose, info, label, set_prop
 from .widgets import Banner, Bar, Card, Gauge, KpiTile, Led, StatusPill, Toggle, TrendChart, vsep
 
 log = logging.getLogger("uvfd.ui")
@@ -608,13 +608,99 @@ class MainWindow(QMainWindow):
             self.toast(tr("trying", what, n, total))
 
     def disconnect_now(self):
-        if self.ctx.running and self.pc_active():
-            if not ask(self, tr("disconnect"), tr("exit_running"), tr("exit_stop"), tr("cancel")):
-                return
-            self.bus.command(D.CMD_STOP)
-            QTimer.singleShot(300, lambda: self.bus.disconnect_drive(True))
+        self.leave(then=lambda: self.bus.disconnect_drive(True), closing=False)
+
+    # ------------------------------------------------------------------ leaving a drive
+    def drive_tag(self) -> dict:
+        """Which drive this is: the PC-control memory belongs to one drive only."""
+        st = self.ctx.settings
+        return {"port": st.get("port", ""), "slave": int(st.get("slave") or 1)}
+
+    def pc_ours(self) -> bool:
+        """PC control is on AND it was UVFD that turned it on, on this very drive."""
+        r = self.ctx.settings.get("pc_restore") or {}
+        if not (self.pc_active() and r.get("P0-02") is not None):
+            return False
+        tag = self.drive_tag()
+        return all(r.get(k, tag[k]) == tag[k] for k in tag)      # older entries carry no tag
+
+    def restore_values(self) -> dict:
+        r = dict(self.ctx.settings.get("pc_restore") or {})
+        out = {"P0-02": r.get("P0-02"), "P0-03": r.get("P0-03")}
+        if out["P0-02"] in (None, D.P002_COMM):
+            out["P0-02"] = D.P002_PANEL
+        if out["P0-03"] in (None, D.P003_COMM):
+            out["P0-03"] = self.ctx.cat.get("P0-03").default or 0
+        return out
+
+    def leave(self, then, closing: bool):
+        """
+        Before disconnecting / closing. Asks to restore the previous mode only
+        when UVFD itself switched this drive to PC control; otherwise only a
+        running motor is asked about, as before.
+        """
+        if not self.ctx.connected:
+            then()
             return
-        self.bus.disconnect_drive(True)
+        if self.pc_ours():
+            rv = self.restore_values()
+            p2, p3 = self.ctx.cat.get("P0-02"), self.ctx.cat.get("P0-03")
+            text = tr("pc_restore_q", "%d · %s" % (rv["P0-02"], p2.option_text(rv["P0-02"])),
+                      "%d · %s" % (rv["P0-03"], p3.option_text(rv["P0-03"])))
+            if self.ctx.running:
+                text += tr("pc_restore_q_run")
+            answer = choose(self, tr("disconnect"), text,
+                            [tr("pc_restore_yes"), tr("pc_restore_no"), tr("cancel")])
+            if answer == 0:
+                self.restore_mode(then=then)
+                return
+            if answer != 1:
+                return
+        if self.ctx.running and self.pc_active():
+            options = [tr("exit_stop"), tr("exit_leave"), tr("cancel")] if closing else [tr("exit_stop"), tr("cancel")]
+            answer = choose(self, tr("disconnect"), tr("exit_running"), options)
+            if answer == 0:
+                self.bus.command(D.CMD_STOP)
+                QTimer.singleShot(300, then)
+            elif closing and answer == 1:
+                then()
+            return
+        then()
+
+    def restore_mode(self, then):
+        """Stop if needed (P0-03 changes only when stopped), write the old P0-02/P0-03, then `then`."""
+        rv = self.restore_values()
+
+        def write():
+            def done(ok, err):
+                if ok:
+                    self.ctx.settings["pc_restore"] = {}
+                    self.ctx.settings.save()
+                    self.toast(tr("pc_restored", rv["P0-02"], rv["P0-03"]))
+                    if then is not None:
+                        then()
+                else:
+                    self.toast("%s: %s" % (tr("error"), err), error=True)
+            self._after_pc = done
+            self.bus.pc_control(False, rv)
+
+        if not self.ctx.running:
+            write()
+            return
+        self.bus.command(D.CMD_STOP)
+        self.toast(tr("waiting_stop"))
+        t0 = time.monotonic()
+
+        def wait():
+            if not self.ctx.connected:
+                return
+            if self.ctx.status == D.ST_STOP:
+                write()
+            elif time.monotonic() - t0 > 120:
+                self.toast(tr("stop_timeout"), error=True)
+            else:
+                QTimer.singleShot(200, wait)
+        QTimer.singleShot(200, wait)
 
     def on_connected(self, info_: dict):
         ident: D.Identity = info_["identity"]
@@ -924,21 +1010,21 @@ class MainWindow(QMainWindow):
         if want:
             if not ask(self, tr("pc_control"), tr("pc_confirm", t, t), tr("pc_enable")):
                 return
-            st["pc_restore"] = {"P0-02": self.ctx.values.get("P0-02"), "P0-03": self.ctx.values.get("P0-03")}
+            st["pc_restore"] = {"P0-02": self.ctx.values.get("P0-02"), "P0-03": self.ctx.values.get("P0-03"),
+                                **self.drive_tag()}
             st.save()
             self.bus.pc_control(True)
         else:
             if self.ctx.running:
                 info(self, tr("pc_control"), tr("need_stop"), warn=True)
                 return
-            restore = dict(st.get("pc_restore") or {})
-            if restore.get("P0-02") in (None, D.P002_COMM):
-                restore["P0-02"] = D.P002_PANEL
-            if restore.get("P0-03") in (None, D.P003_COMM):
-                restore["P0-03"] = self.ctx.cat.get("P0-03").default or 0
-            self.bus.pc_control(False, restore)
+            self.restore_mode(then=None)
 
     def on_command_done(self, what: str, ok: bool, err: str):
+        if what == "pc":
+            cb, self._after_pc = getattr(self, "_after_pc", None), None
+            if cb is not None:
+                cb(ok, err)
         if not ok and what == "pd04":
             self.banner.show_msg(err, th.AMBER, "⚠")
             return
@@ -1214,22 +1300,14 @@ class MainWindow(QMainWindow):
         self.resize(1480, 900)
 
     def closeEvent(self, e):
-        if self.ctx.connected and self.ctx.running and self.pc_active():
-            from PySide6.QtWidgets import QMessageBox
-            m = QMessageBox(self)
-            m.setWindowTitle("UVFD")
-            m.setIcon(QMessageBox.Warning)
-            m.setText(tr("exit_running"))
-            b_stop = m.addButton(tr("exit_stop"), QMessageBox.AcceptRole)
-            b_leave = m.addButton(tr("exit_leave"), QMessageBox.DestructiveRole)
-            m.addButton(tr("cancel"), QMessageBox.RejectRole)
-            m.exec()
-            if m.clickedButton() is b_stop:
-                self.bus.command(D.CMD_STOP)
-                time.sleep(0.3)
-            elif m.clickedButton() is not b_leave:
-                e.ignore()
-                return
+        if self.ctx.connected and not getattr(self, "_close_ok", False):
+            e.ignore()
+
+            def go():
+                self._close_ok = True
+                QTimer.singleShot(0, self.close)
+            self.leave(then=go, closing=True)
+            return
         self.stop_record()
         self.ctx.settings["geometry"] = bytes(self.saveGeometry().toBase64()).decode()
         self.ctx.settings.save()

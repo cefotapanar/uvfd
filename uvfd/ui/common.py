@@ -90,6 +90,20 @@ def ask(parent, title: str, text: str, yes: str | None = None, no: str | None = 
     return m.clickedButton() is by
 
 
+def choose(parent, title: str, text: str, options: list[str], default: int = 0) -> int:
+    """Several answers; returns the index of the clicked one, -1 for Esc / X."""
+    m = QMessageBox(parent)
+    m.setWindowTitle(title)
+    m.setText(text)
+    m.setIcon(QMessageBox.Question)
+    buttons = [m.addButton(o, QMessageBox.AcceptRole) for o in options]
+    if 0 <= default < len(buttons):
+        m.setDefaultButton(buttons[default])
+    m.exec()
+    clicked = m.clickedButton()
+    return buttons.index(clicked) if clicked in buttons else -1
+
+
 def info(parent, title: str, text: str, warn: bool = False):
     m = QMessageBox(parent)
     m.setWindowTitle(title)

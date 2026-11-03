@@ -350,6 +350,89 @@ def test_search_cancel_closes_and_frees_the_app():
         store.paths.DATA, store.paths.SNAPSHOTS = old_data, old_snaps
 
 
+def _pc_scenario(prepare_sim, script):
+    """Connect the demo drive in a real MainWindow with scripted answers to the questions."""
+    import uvfd.ui.main_window as mw
+    old = (mw.ask, mw.choose, paths.DATA, paths.SNAPSHOTS)
+    asked = []
+    mw.ask = lambda *a, **k: True
+    mw.choose = lambda parent, title, text, options, default=0: (asked.append(text), script(text))[1]
+    try:
+        app, win, bus = _main_window(Path(tempfile.mkdtemp()))
+        bus.sim = SimDrive(CAT, "21")
+        sim = bus.sim
+        sim.ram[(0, 18)] = sim.eeprom[(0, 18)] = 10              # 1.0 s deceleration
+        prepare_sim(sim)
+        win.connect_now(demo_variant="21")
+        assert _wait(app, lambda: win.ctx.connected, 10), "no connection"
+        return app, win, bus, sim, asked
+    finally:
+        mw.ask, mw.choose = old[0], old[1]
+        mw._old = old
+
+
+def _pc_done():
+    import uvfd.ui.main_window as mw
+    store.paths.DATA, store.paths.SNAPSHOTS = mw._old[2], mw._old[3]
+
+
+def test_disconnect_restores_mode_uvfd_set():
+    import uvfd.ui.main_window as mw
+    app, win, bus, sim, asked = _pc_scenario(lambda sim: None, lambda text: 0)
+    try:
+        assert (sim.ram[(0, 2)], sim.ram[(0, 3)]) == (0, 4)       # BIOS 21 demo: keypad + potentiometer
+        mw.ask, mw.choose = (lambda *a, **k: True), (lambda p, t, text, o, d=0: (asked.append(text), 0)[1])
+        win.on_pc_toggle(True)
+        assert _wait(app, lambda: sim.ram[(0, 2)] == 2 and win.pc_active(), 5)
+        assert win.pc_ours()
+        win.sp_hz.setValue(20)
+        win.do_run(D.CMD_FWD)
+        assert _wait(app, lambda: win.ctx.running, 5)
+        win.disconnect_now()                                      # restore -> stops the motor first
+        assert _wait(app, lambda: not bus.is_connected, 15), "did not disconnect"
+        assert len(asked) == 1 and "P0-02" in asked[0]
+        assert (sim.ram[(0, 2)], sim.ram[(0, 3)]) == (0, 4), "old mode not restored"
+        assert sim.ram[(13, 4)] == 0                              # PD-04 back
+        assert win.ctx.settings.get("pc_restore") == {}
+        bus.shutdown()
+    finally:
+        _pc_done()
+
+
+def test_disconnect_does_not_ask_when_pc_was_already_on():
+    def already_pc(sim):
+        for k, v in (((0, 2), 2), ((0, 3), 9)):
+            sim.ram[k] = sim.eeprom[k] = v
+
+    def must_not_ask(text):
+        raise AssertionError("asked although UVFD did not turn PC control on: " + text)
+    app, win, bus, sim, asked = _pc_scenario(already_pc, must_not_ask)
+    try:
+        import uvfd.ui.main_window as mw
+        mw.choose = lambda *a, **k: must_not_ask(a[2])
+        assert win.pc_active() and not win.pc_ours()
+        win.disconnect_now()
+        assert _wait(app, lambda: not bus.is_connected, 5)
+        assert sim.ram[(0, 2)] == 2                               # left exactly as it was
+        bus.shutdown()
+    finally:
+        _pc_done()
+
+
+def test_close_can_keep_pc_mode():
+    app, win, bus, sim, asked = _pc_scenario(lambda sim: None, lambda text: 1)
+    try:
+        import uvfd.ui.main_window as mw
+        mw.ask, mw.choose = (lambda *a, **k: True), (lambda p, t, text, o, d=0: (asked.append(text), 1)[1])
+        win.on_pc_toggle(True)
+        assert _wait(app, lambda: sim.ram[(0, 2)] == 2 and win.pc_active(), 5)
+        win.close()                                               # "Disconnect, keep PC"
+        assert _wait(app, lambda: not bus.is_connected, 5)
+        assert len(asked) == 1 and sim.ram[(0, 2)] == 2 and sim.ram[(13, 4)] == 0
+    finally:
+        _pc_done()
+
+
 def test_version_compare():
     from uvfd.updater import is_newer
     assert is_newer("1.10.0", "1.9.0")

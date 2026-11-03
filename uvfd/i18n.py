@@ -230,6 +230,19 @@ T = {
     "error": ("Грешка", "Error"),
     "busy": ("Друга работа е во тек на кабелот — почекај.", "Another job is using the cable — wait."),
     "connect_first": ("Прво поврзи се со фреквентен.", "Connect to a drive first."),
+    "pc_restore_q": ("PC управувањето на овој фреквентен го вклучи UVFD.\n\n"
+                     "Пред да прекинеш, да го вратам претходниот режим?\n\n"
+                     "   Команди (P0-02):  %s\n   Брзина (P0-03):  %s",
+                     "UVFD turned PC control on for this drive.\n\n"
+                     "Restore the previous mode before disconnecting?\n\n"
+                     "   Commands (P0-02):  %s\n   Speed (P0-03):  %s"),
+    "pc_restore_q_run": ("\n\nМоторот работи - прво ќе го запрам.", "\n\nThe motor is running - it will be stopped first."),
+    "pc_restore_yes": ("Врати и прекини", "Restore and disconnect"),
+    "pc_restore_no": ("Прекини, остави PC", "Disconnect, keep PC"),
+    "waiting_stop": ("Чекам моторот да запре…", "Waiting for the motor to stop…"),
+    "stop_timeout": ("Моторот не запре - врската останува, режимот не е вратен.",
+                     "The motor did not stop - still connected, the mode was not restored."),
+    "pc_restored": ("Вратено: P0-02 = %s, P0-03 = %s", "Restored: P0-02 = %s, P0-03 = %s"),
     "exit_running": ("Моторот работи под PC управување.", "The motor is running under PC control."),
     "exit_stop": ("Запри и излези", "Stop and exit"),
     "exit_leave": ("Излези, нека работи", "Exit, keep running"),
